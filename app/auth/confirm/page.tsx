@@ -7,12 +7,49 @@
 
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
 import Image from 'next/image'
 
-export default function ConfirmPage() {
+function LoadingScreen() {
+  return (
+    <main style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(160deg, #F5F3FF 0%, #EFF6FF 60%, #F0FDF4 100%)',
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <div style={{ textAlign: 'center' }}>
+        <Image
+          src="/iris-logo_transparent.png"
+          alt="IRIS"
+          width={56}
+          height={56}
+          style={{ marginBottom: 20, opacity: 0.8 }}
+        />
+        <div style={{
+          width: 32,
+          height: 32,
+          border: '3px solid #DDD6FE',
+          borderTopColor: '#7C3AED',
+          borderRadius: '50%',
+          margin: '0 auto 16px',
+          animation: 'spin 0.7s linear infinite',
+        }}/>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        <p style={{ fontSize: 14, color: '#64748B' }}>Connexion en cours…</p>
+      </div>
+    </main>
+  )
+}
+
+// Isolé dans son propre composant car useSearchParams() impose un encadrement
+// Suspense pour être pré-rendu statiquement par Next.js — toute la logique qui
+// en dépend doit donc vivre ici, pas dans le composant de page exporté par défaut.
+function ConfirmContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const next         = searchParams.get('next') ?? '/dashboard'
@@ -75,7 +112,6 @@ export default function ConfirmPage() {
           boxShadow: '0 4px 40px rgba(76,29,149,0.08)',
           border: '1px solid #EDE9FE',
         }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>⚠️</div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>
             Lien expiré ou invalide
           </h2>
@@ -101,35 +137,13 @@ export default function ConfirmPage() {
   }
 
   // État de chargement pendant la vérification
+  return <LoadingScreen />
+}
+
+export default function ConfirmPage() {
   return (
-    <main style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(160deg, #F5F3FF 0%, #EFF6FF 60%, #F0FDF4 100%)',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{ textAlign: 'center' }}>
-        <Image
-          src="/iris-logo_transparent.png"
-          alt="IRIS"
-          width={56}
-          height={56}
-          style={{ marginBottom: 20, opacity: 0.8 }}
-        />
-        <div style={{
-          width: 32,
-          height: 32,
-          border: '3px solid #DDD6FE',
-          borderTopColor: '#7C3AED',
-          borderRadius: '50%',
-          margin: '0 auto 16px',
-          animation: 'spin 0.7s linear infinite',
-        }}/>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        <p style={{ fontSize: 14, color: '#64748B' }}>Connexion en cours…</p>
-      </div>
-    </main>
+    <Suspense fallback={<LoadingScreen />}>
+      <ConfirmContent />
+    </Suspense>
   )
 }

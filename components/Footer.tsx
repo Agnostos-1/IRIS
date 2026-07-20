@@ -101,9 +101,9 @@ export default function Footer() {
 
         {/* BAS DE FOOTER */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 text-slate-500 text-xs md:text-sm">
-          <div>
-            © {new Date().getFullYear()} IRIS
-          </div>
+        <div>
+		  © {new Date().getFullYear()} IRIS · <Link href="https://github.com/Agnostos-1/IRIS" style={{ color: 'inherit', textDecoration: 'underline' }}>Code source (AGPLv3)</Link>
+		</div>
           <div className="font-mono text-[11px] tracking-wider uppercase opacity-80">
             Inclusive Rational Interaction System
           </div>
