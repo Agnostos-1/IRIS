@@ -1866,7 +1866,7 @@ export default function ActivitiesPage() {
       )}
 
       {/* Feedback */}
-      <a href="https://tally.so/r/IRIS-feedback" target="_blank" rel="noopener noreferrer"
+      <a href="https://tally.so/r/Y5qxz0" target="_blank" rel="noopener noreferrer"
         style={{
           position: 'fixed', bottom: 24, right: 24, display: 'flex', alignItems: 'center', gap: 8,
           padding: '10px 16px', borderRadius: 24, background: 'white', color: '#4C1D95',
