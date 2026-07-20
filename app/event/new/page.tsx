@@ -7,7 +7,7 @@
 
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/browser'
 import Image from 'next/image'
@@ -198,7 +198,7 @@ function AutoGroupPopup({ extraEmails, onConfirm, onSkip, onCancel, mode }: Auto
 }
 
 // ── Page principale ───────────────────────────────────────────────────────────
-export default function NewEventPage() {
+function NewEventPageContent() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const preselectedGroup = searchParams.get('group')
@@ -1194,5 +1194,13 @@ export default function NewEventPage() {
       </a>
 
     </div>
+  )
+}
+
+export default function NewEventPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewEventPageContent />
+    </Suspense>
   )
 }
