@@ -29,6 +29,7 @@ interface ResultsData {
   event: { id: string; name: string; created_by: string }
   winningScenario?: WinningScenario
   myUtility?: MyUtility | null
+  medianUtility?: number | null
   participantCount?: number
   compensation?: {
     applied: { averageRi: number; allNeutral: boolean }
@@ -309,7 +310,7 @@ export default function ResultsPage() {
     )
   }
   
-  const { event, winningScenario: s, myUtility, participantCount, compensation, voteMethod, condorcetSummary } = data
+  const { event, winningScenario: s, myUtility, medianUtility, participantCount, compensation, voteMethod, condorcetSummary } = data
 	if (!s || participantCount === undefined) return null
 
   return (
@@ -500,6 +501,18 @@ export default function ResultsPage() {
             {' '}Le détail exact, groupe par groupe et au global, est ci-dessous.
           </p>
 
+          {medianUtility != null && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+              background: 'white', borderRadius: 10, border: '1px solid #DDD6FE', padding: '10px 14px', marginBottom: 12,
+            }}>
+              <span style={{ fontSize: 12, color: '#4C1D95' }}>
+                📊 Médiane des satisfactions individuelles (ce que compare le coefficient d'équité)
+              </span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: '#4C1D95' }}>{pct(medianUtility)}</span>
+            </div>
+          )}
+
           {/* Résumé toujours visible (global), détail complet replié — évite d'alourdir
               l'interface pour quelqu'un dans un seul groupe, tout en gardant le détail
               accessible en un clic pour qui appartient à plusieurs groupes liés à cet événement. */}
@@ -555,6 +568,9 @@ export default function ResultsPage() {
 
               <p style={{ fontSize: 10, color: '#94A3B8', margin: '8px 0 0' }}>
                 "Appliqué" = ce qui a servi au calcul de ce résultat. "Mis à jour" = ce qui s'appliquera au prochain événement. Une hausse (🟢) vous favorisera davantage la prochaine fois ; une baisse (🟠) tempérera légèrement en faveur des autres.
+              </p>
+              <p style={{ fontSize: 10, color: '#94A3B8', margin: '4px 0 0' }}>
+                Ce coefficient se base sur la médiane ci-dessus, pas sur la "Satisfaction du groupe" affichée en haut de page (moyenne géométrique pondérée, utilisée pour choisir le scénario) — les deux mesures sont différentes et ne bougent pas forcément ensemble.
               </p>
             </>
           )}

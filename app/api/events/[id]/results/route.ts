@@ -8,7 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
-import { computeFairnessCoefficients, computeFairnessBreakdown } from '@/lib/iris/pareto-engine'
+import { computeFairnessCoefficients, computeFairnessBreakdown, median } from '@/lib/iris/pareto-engine'
 
 interface SnapshotPerUser { userId: string; uPrime: number; ri: number; fB: number; fS: number; fD: number }
 interface Snapshot {
@@ -96,6 +96,15 @@ export async function GET(
 
   const snapshot = event.winning_scenario_snapshot as Snapshot
   const myEntry  = snapshot.perUser.find(p => p.userId === user.id) ?? null
+
+  // Médiane des utilités individuelles de CET événement — c'est CETTE valeur que compare
+  // le Rᵢ (via computeFairnessCoefficients), pas le groupScore (moyenne géométrique
+  // pondérée) affiché comme "Satisfaction du groupe". Les deux sont volontairement
+  // distincts (usages différents : sélection du scénario vs équité), mais ça mérite
+  // d'être visible à l'écran pour éviter toute confusion entre les deux chiffres.
+  const medianUtility = snapshot.perUser.length
+    ? median(snapshot.perUser.map(p => p.uPrime))
+    : null
 
   // Rᵢ APPLIQUÉ pour ce résultat (basé sur l'historique AVANT cet événement — déjà figé dans le snapshot)
   const appliedAvgRi = snapshot.perUser.length
@@ -199,6 +208,7 @@ export async function GET(
       groupScore:       snapshot.groupScore,
     },
     myUtility: myEntry ? { value: myEntry.uPrime, ri: myEntry.ri, fB: myEntry.fB, fS: myEntry.fS, fD: myEntry.fD } : null,
+    medianUtility,
     participantCount: snapshot.perUser.length,
     compensation: {
       applied: { averageRi: appliedAvgRi, allNeutral: appliedAllNeutral },

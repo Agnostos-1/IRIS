@@ -9,12 +9,18 @@ import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+// Logs de debug actifs uniquement en local — jamais en production (dépôt public,
+// et exchangeCodeForSession renvoie les tokens de session dans `data`).
+const devLog = (...args: unknown[]) => {
+  if (process.env.NODE_ENV === 'development') console.log(...args)
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url)
   const next = searchParams.get('next') ?? '/dashboard'
 
-  console.log('CALLBACK params:', Object.fromEntries(searchParams.entries()))
-  console.log('CALLBACK cookies:', request.cookies.getAll().map(c => c.name))
+  devLog('CALLBACK params:', Object.fromEntries(searchParams.entries()))
+  devLog('CALLBACK cookies:', request.cookies.getAll().map(c => c.name))
 
   // Flux PKCE : Supabase a déjà vérifié le token côté serveur
   // et posé un cookie de session. On échange juste le code si présent.
@@ -22,7 +28,7 @@ const code = searchParams.get('code')
 if (code) {
   const supabase = await createClient()
   const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-  console.log('exchangeCodeForSession result:', { data, error })
+  devLog('exchangeCodeForSession result:', { data, error })
   if (!error) {
     return NextResponse.redirect(`${origin}${next}`)
   }

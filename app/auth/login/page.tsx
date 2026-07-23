@@ -14,7 +14,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 
 type Mode = 'password' | 'magic'
-type Status = 'idle' | 'loading' | 'sent' | 'error'
+type Status = 'idle' | 'loading' | 'sent' | 'error' | 'confirm-email'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -49,17 +49,9 @@ export default function LoginPage() {
         setStatus('error')
         setErrorMsg(error.message)
       } else {
-        // Connexion directe après inscription (email confirmé auto)
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email:    email.trim().toLowerCase(),
-          password: password,
-        })
-        if (signInError) {
-          setStatus('error')
-          setErrorMsg('Compte créé — connectez-vous maintenant.')
-        } else {
-          router.push(next)
-        }
+        // Le compte est créé mais nécessite une confirmation par email
+        // (paramètre "Confirm email" activé côté Supabase) avant de pouvoir se connecter.
+        setStatus('confirm-email')
       }
     } else {
       // Connexion
@@ -68,12 +60,16 @@ export default function LoginPage() {
         password: password,
       })
       if (error) {
-        setStatus('error')
-        setErrorMsg(
-          error.message === 'Invalid login credentials'
-            ? 'Email ou mot de passe incorrect.'
-            : error.message
-        )
+        if (error.message === 'Email not confirmed') {
+          setStatus('confirm-email')
+        } else {
+          setStatus('error')
+          setErrorMsg(
+            error.message === 'Invalid login credentials'
+              ? 'Email ou mot de passe incorrect.'
+              : error.message
+          )
+        }
       } else {
         router.push(next)
       }
@@ -189,7 +185,26 @@ export default function LoginPage() {
         </div>
 
         {/* ── Mode mot de passe ── */}
-        {mode === 'password' && (
+        {mode === 'password' && status === 'confirm-email' && (
+          <div style={{ textAlign: 'center', padding: '16px 0' }}>
+            <div style={{ fontSize: 44, marginBottom: 14 }}>📬</div>
+            <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1E293B', marginBottom: 8 }}>
+              Confirmez votre email
+            </h2>
+            <p style={{ fontSize: 13, color: '#64748B', lineHeight: 1.6, marginBottom: 20 }}>
+              Un email de confirmation a été envoyé à <strong style={{ color: '#4C1D95' }}>{email}</strong>.
+              <br/>
+              Cliquez sur le lien qu'il contient pour activer votre compte, puis connectez-vous.
+            </p>
+            <button onClick={() => { setStatus('idle'); setIsSignUp(false) }}
+              style={{ background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 13, color: '#7C3AED', textDecoration: 'underline' }}>
+              Retour à la connexion
+            </button>
+          </div>
+        )}
+
+        {mode === 'password' && status !== 'confirm-email' && (
           <form onSubmit={handlePassword}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600,

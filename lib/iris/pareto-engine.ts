@@ -112,7 +112,7 @@ export function factorDistanceRoundTrip(user: DBUser, scenario: ScenarioCandidat
 
 interface EventUtilityRow { event_id: string; group_ids: string[] | null; utility: number }
 
-function median(arr: number[]): number {
+export function median(arr: number[]): number {
   const s = [...arr].sort((a, b) => a - b)
   const n = s.length
   return n % 2 === 0 ? (s[n / 2 - 1] + s[n / 2]) / 2 : s[Math.floor(n / 2)]
