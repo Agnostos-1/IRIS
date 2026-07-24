@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   display_name  TEXT,
 
   -- Localisation et transport (moteur IRIS)
-  zone          TEXT DEFAULT 'P-centre',   -- zone géographique
+  zone          TEXT,                      -- adresse de départ libre (géocodée via Nominatim)
   transport     TEXT CHECK (transport IN ('foot','transit','car')) DEFAULT 'transit',
   distance_max  INTEGER DEFAULT 15,        -- Dm en km
 

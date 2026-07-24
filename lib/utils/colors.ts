@@ -20,14 +20,6 @@ export function getColorForScore(value: number): [string, string] {
   return ["#FECACA", "#7F1D1D"];
 }
 
-export const ZONE_LABELS: Record<string, string> = {
-  "P-nord": "Paris-nord",
-  "P-centre": "Paris-centre",
-  "P-est": "Paris-est",
-  "P-ouest": "Paris-ouest",
-  "P-sud": "Paris-sud",
-};
-
 export const TRANSPORT_LABELS: Record<string, string> = {
   foot: "🚶 Pied",
   transit: "🚇 Transports",
