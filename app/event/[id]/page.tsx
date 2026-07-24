@@ -210,7 +210,7 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       if (syncData.diffs?.length > 0) {
         setPrefSyncDiffs(syncData.diffs)
         setPrefSyncDecisions(Object.fromEntries(
-          syncData.diffs.map((d: { type: string; oldVal: number | null }) => [d.type, { action: d.oldVal === null ? 'update' : 'update', parent: '', subtype: '' }])
+          syncData.diffs.map((d: { type: string; oldVal: number | null }) => [d.type, { action: d.oldVal === null ? 'update' : 'update', parent: d.type, subtype: '' }])
         ))
         setShowPrefSyncModal(true)
       }
@@ -1685,12 +1685,10 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
                         Créer comme sous-type distinct (garder {d.type} à {d.oldVal ?? '—'}%)
                       </label>
                       {dec.action === 'create_subtype' && (
-                        <div style={{ display: 'flex', gap: 6, marginLeft: 22 }}>
-                          <select value={dec.parent} onChange={e => setPrefSyncDecisions(p => ({ ...p, [d.type]: { ...dec, parent: e.target.value } }))}
-                            style={{ fontSize: 12, padding: '4px 8px', borderRadius: 7, border: '1px solid #E2E8F0' }}>
-                            <option value="">Type parent…</option>
-                            <option value={d.type}>{d.type}</option>
-                          </select>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 22 }}>
+                          <span style={{ fontSize: 12, color: '#64748B', whiteSpace: 'nowrap' }}>
+                            Sous-type de <strong>{d.type}</strong> :
+                          </span>
                           <input type="text" value={dec.subtype} placeholder="Nom du sous-type"
                             onChange={e => setPrefSyncDecisions(p => ({ ...p, [d.type]: { ...dec, subtype: e.target.value } }))}
                             style={{ fontSize: 12, padding: '4px 8px', borderRadius: 7, border: '1px solid #E2E8F0', flex: 1 }}/>

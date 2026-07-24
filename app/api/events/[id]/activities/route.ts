@@ -115,27 +115,60 @@ export async function GET(
   // ── Disponibilités du user (pour afficher si dispo pour une activité) ──────
   const { data: userAvailabilities } = await adminSupabase
     .from('availabilities')
-    .select('date, slot_start, slot_end, status, constraint_overrides')
+    .select('date, slot_start, slot_end, status, constraint_overrides, pref_overrides')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
 
+  // Sous-types connus et leur type parent — nécessaire pour éviter qu'un sous-type
+  // et son parent apparaissent comme deux entrées concurrentes redondantes ci-dessous,
+  // et réutilisé plus bas pour knownSubtypeNames.
+  const { data: subtypeRows } = await adminSupabase.from('activity_subtypes').select('name, parent_type')
+  const subtypeParentByName = new Map((subtypeRows ?? []).map(r => [r.name, r.parent_type]))
+
   // ── Top 5 types d'activités préférés du groupe ─────────────────────────────
-  const groupPrefs: Record<string, number[]> = {}
-  for (const profile of (participantProfiles ?? [])) {
+  // Un sous-type personnalisé n'est pas forcément noté par tout le monde (il vient
+  // d'être créé par un seul membre) : pour qui n'a pas de valeur explicite, on retombe
+  // sur sa préférence pour le TYPE PARENT (tout profil ayant terminé l'onboarding en a
+  // toujours une, cf. app/profile/page.tsx) — ex. quelqu'un qui a "Parapente" en sous-type
+  // de "Sport" mais n'a pas encore noté le parapente contribue avec sa note de Sport.
+  // Chaque type/sous-type est ainsi moyenné sur le même nombre de participants, ce qui
+  // évite qu'un sous-type flambant neuf noté 100% par une seule personne écrase des types
+  // établis notés par tout le groupe.
+  const profiles = participantProfiles ?? []
+  const candidateTypes = new Set<string>()
+  for (const profile of profiles) {
     const prefs = (profile.activity_prefs ?? {}) as Record<string, number>
-    for (const [type, val] of Object.entries(prefs)) {
-      if (!groupPrefs[type]) groupPrefs[type] = []
-      groupPrefs[type].push(val)
-    }
+    for (const type of Object.keys(prefs)) candidateTypes.add(type)
   }
-  const groupTopTypes = Object.entries(groupPrefs)
-    .map(([type, vals]) => ({
-      type,
-      avg: vals.reduce((s, v) => s + v, 0) / vals.length,
-      count: vals.length,
-    }))
+  const ranked = [...candidateTypes]
+    .map(type => {
+      const parent = subtypeParentByName.get(type)
+      const vals: number[] = []
+      for (const profile of profiles) {
+        const prefs = (profile.activity_prefs ?? {}) as Record<string, number>
+        const value = prefs[type] ?? (parent ? prefs[parent] : undefined)
+        if (value !== undefined) vals.push(value)
+      }
+      return {
+        type,
+        avg: vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0,
+        count: vals.length,
+      }
+    })
     .sort((a, b) => b.avg - a.avg)
-    .slice(0, 5)
+
+  // Un sous-type et son type parent ne doivent pas concourir comme deux entrées
+  // distinctes : on ne garde que le mieux noté des deux.
+  const avgByType = new Map(ranked.map(t => [t.type, t.avg]))
+  const excludedTypes = new Set<string>()
+  for (const t of ranked) {
+    const parent = subtypeParentByName.get(t.type)
+    if (!parent) continue
+    const parentAvg = avgByType.get(parent)
+    if (parentAvg === undefined) continue
+    excludedTypes.add(t.avg >= parentAvg ? parent : t.type)
+  }
+  const groupTopTypes = ranked.filter(t => !excludedTypes.has(t.type)).slice(0, 5)
 
   // ── Dérogations par activité de tous les participants réels ────────────────
   // Nécessaire pour ne pas compter un conflit que la personne concernée a déjà
@@ -172,7 +205,6 @@ export async function GET(
   // Noms de tous les sous-types enregistrés globalement — pour que le front puisse les
   // exclure du menu "Type d'activité" racine (un sous-type stocké comme clé plate dans
   // activity_prefs ne doit jamais apparaître comme sélectionnable en tant que type racine).
-  const { data: subtypeRows } = await adminSupabase.from('activity_subtypes').select('name')
   const knownSubtypeNames = [...new Set((subtypeRows ?? []).map(r => r.name))]
 
   return NextResponse.json({

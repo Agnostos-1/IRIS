@@ -317,11 +317,6 @@ function ActivityCard({
 
   useEffect(() => { setLocalPref(globalPref ?? 50) }, [globalPref])
 
-  // Notify parent when pref changes so sync modal can collect diffs
-  useEffect(() => {
-    if (prefChanged) onPrefChange(activity.type, localPref)
-  }, [localPref, prefChanged, activity.type, onPrefChange])
-
   // Distance
   let distanceKm: number | null = null
   if (userProfile?.home_lat != null && userProfile?.home_lng != null
@@ -478,7 +473,11 @@ function ActivityCard({
               </div>
             </div>
             <input type="range" min={0} max={100} step={5} value={localPref}
-              onChange={e => setLocalPref(Number(e.target.value))}
+              onChange={e => {
+                const v = Number(e.target.value)
+                setLocalPref(v)
+                onPrefChange(activity.type, v)
+              }}
               style={{ width: '100%', accentColor: '#7C3AED', ...inputStyle }}
             />
           </div>
@@ -1338,7 +1337,7 @@ function SyncModal({
                         </div>
                         {dec.action === 'create_subtype' && (
                           <input type="text"
-                            value={dec.subtype || d.type}
+                            value={dec.subtype}
                             onChange={e => setSubtype(d.type, e.target.value)}
                             placeholder={`Nom du sous-type de ${d.type}`}
                             style={{
