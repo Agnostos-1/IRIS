@@ -84,3 +84,20 @@ export async function sendEventInviteEmail({
     html: wrapEmail(`Invitation à ${eventName}`, body, "Voir l'événement", joinUrl),
   })
 }
+
+export async function sendDeadlineReminderEmail({
+  to, eventName, eventUrl, deadlineLabel,
+}: {
+  to: string; eventName: string; eventUrl: string; deadlineLabel: string
+}) {
+  const subject = `Plus que 2 jours pour répondre à "${eventName}"`
+  const body = `
+    <p>Vous n'avez pas encore indiqué vos disponibilités pour <strong>${eventName}</strong> sur IRIS.</p>
+    <p>La date limite de réponse est fixée au <strong>${deadlineLabel}</strong> — répondez avant cette date
+    pour que votre avis compte dans le choix du groupe.</p>
+  `
+  return sendEmail({
+    to, subject,
+    html: wrapEmail(`Rappel — ${eventName}`, body, 'Indiquer mes disponibilités', eventUrl),
+  })
+}
