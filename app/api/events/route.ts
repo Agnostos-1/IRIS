@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { sendEventInviteEmail } from '@/lib/email/send'
 
 export async function POST(request: Request) {
   const supabase      = await createClient()
@@ -70,6 +71,42 @@ export async function POST(request: Request) {
       if (copyError) {
         console.error('Duplication événement — échec de la copie des activités:', copyError)
       }
+    }
+  }
+
+  // Notifie les participants qui n'auraient autrement aucun moyen de découvrir
+  // l'événement avant leur prochaine connexion : membres réellement invités des
+  // groupes concernés, et participants "extra" ajoutés directement par email.
+  const { data: inviter } = await adminSupabase
+    .from('users').select('display_name, email').eq('id', user.id).single()
+  const inviterName = inviter?.display_name ?? inviter?.email?.split('@')[0] ?? 'Un membre IRIS'
+  const joinUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')}/join/${event.invite_code}`
+
+  let memberIds: string[] = invitedMemberIds ?? []
+  if (!invitedMemberIds) {
+    const { data: groupMembers } = await adminSupabase
+      .from('group_members').select('user_id').in('group_id', groupIds)
+    memberIds = [...new Set((groupMembers ?? []).map((m: { user_id: string }) => m.user_id))]
+  }
+  memberIds = memberIds.filter(id => id !== user.id)
+
+  if (memberIds.length > 0) {
+    const { data: members } = await adminSupabase
+      .from('users').select('email').in('id', memberIds)
+    for (const m of (members ?? [])) {
+      sendEventInviteEmail({
+        to: m.email, inviterName, eventName: name.trim(), joinUrl, isExistingUser: true,
+      }).catch(() => {})
+    }
+  }
+  if (extraEmails?.length > 0) {
+    const { data: extraExisting } = await adminSupabase
+      .from('users').select('email').in('email', extraEmails)
+    const existingEmails = new Set((extraExisting ?? []).map(u => u.email))
+    for (const email of extraEmails) {
+      sendEventInviteEmail({
+        to: email, inviterName, eventName: name.trim(), joinUrl, isExistingUser: existingEmails.has(email),
+      }).catch(() => {})
     }
   }
 

@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { sendEventInviteEmail } from '@/lib/email/send'
 
 // ─── POST /api/events/[id]/invite ──────────────────────────────────────────────
 // Invitation par email directement à CET événement (pas au groupe) — n'a de sens
@@ -32,7 +33,7 @@ export async function POST(
 
   const { data: event } = await adminSupabase
     .from('events')
-    .select('created_by, open_invite, extra_emails')
+    .select('created_by, open_invite, extra_emails, name, invite_code')
     .eq('id', eventId)
     .single()
 
@@ -56,14 +57,22 @@ export async function POST(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Indique si un compte IRIS existe déjà pour cet email, uniquement pour adapter
-  // le message affiché (email d'invitation réel à implémenter — même limite que
-  // partout ailleurs dans l'app tant que Resend n'est pas branché).
+  // Indique si un compte IRIS existe déjà pour cet email, pour adapter le message
+  // affiché ET le contenu de l'email envoyé.
   const { data: existing } = await adminSupabase
     .from('users')
     .select('id')
     .eq('email', clean)
     .maybeSingle()
+
+  const { data: inviter } = await adminSupabase
+    .from('users').select('display_name, email').eq('id', user.id).single()
+  const inviterName = inviter?.display_name ?? inviter?.email?.split('@')[0] ?? 'Un membre IRIS'
+  const joinUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')}/join/${event.invite_code}`
+
+  sendEventInviteEmail({
+    to: clean, inviterName, eventName: event.name, joinUrl, isExistingUser: !!existing,
+  }).catch(() => {})
 
   return NextResponse.json({ existing: !!existing })
 }

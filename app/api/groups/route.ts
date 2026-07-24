@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { sendGroupInviteEmail } from '@/lib/email/send'
 
 export async function POST(request: Request) {
   const supabase      = await createClient()
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   const { data: group, error: groupError } = await adminSupabase
     .from('groups')
     .insert({ owner_id: user.id, name: name.trim(), description: description?.trim() || null })
-    .select('id')
+    .select('id, invite_code')
     .single()
 
   if (groupError || !group) {
@@ -38,6 +39,11 @@ export async function POST(request: Request) {
 
   // Invite les membres existants
   if (emails?.length > 0) {
+    const { data: inviter } = await adminSupabase
+      .from('users').select('display_name, email').eq('id', user.id).single()
+    const inviterName = inviter?.display_name ?? inviter?.email?.split('@')[0] ?? 'Un membre IRIS'
+    const joinUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')}/join/group/${group.invite_code}`
+
     for (const email of emails) {
       const { data: existing } = await adminSupabase
         .from('users').select('id').eq('email', email).single()
@@ -46,6 +52,9 @@ export async function POST(request: Request) {
           group_id: group.id, user_id: existing.id, status: 'invited',
         })
       }
+      sendGroupInviteEmail({
+        to: email, inviterName, groupName: name.trim(), joinUrl, isExistingUser: !!existing,
+      }).catch(() => {})
     }
   }
 

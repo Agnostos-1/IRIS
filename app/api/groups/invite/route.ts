@@ -8,6 +8,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextResponse } from 'next/server'
+import { sendGroupInviteEmail } from '@/lib/email/send'
 
 export async function POST(request: Request) {
   const supabase      = await createClient()
@@ -24,13 +25,21 @@ export async function POST(request: Request) {
   // Vérifie que l'appelant est bien owner du groupe
   const { data: group } = await adminSupabase
     .from('groups')
-    .select('owner_id')
+    .select('owner_id, name, invite_code')
     .eq('id', groupId)
     .single()
 
   if (!group || group.owner_id !== user.id) {
     return NextResponse.json({ error: 'Non autorisé' }, { status: 403 })
   }
+
+  const { data: inviter } = await adminSupabase
+    .from('users')
+    .select('display_name, email')
+    .eq('id', user.id)
+    .single()
+  const inviterName = inviter?.display_name ?? inviter?.email?.split('@')[0] ?? 'Un membre IRIS'
+  const joinUrl = `${(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000')}/join/group/${group.invite_code}`
 
   // Cherche si cet email a déjà un compte IRIS
   const { data: existing } = await adminSupabase
@@ -61,10 +70,19 @@ export async function POST(request: Request) {
     })
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+    sendGroupInviteEmail({
+      to: email, inviterName, groupName: group.name, joinUrl, isExistingUser: true,
+    }).catch(() => {})
+
     return NextResponse.json({ existing: true })
   }
 
-  // Email inconnu — pour l'instant on le note (envoi d'email à implémenter)
-  // TODO: envoyer un email d'invitation via Resend + créer un invitation_token
+  // Email inconnu — aucune ligne à créer (rien à rattacher tant que la personne n'a
+  // pas de compte) ; elle rejoindra le groupe elle-même via ce lien après inscription.
+  sendGroupInviteEmail({
+    to: email, inviterName, groupName: group.name, joinUrl, isExistingUser: false,
+  }).catch(() => {})
+
   return NextResponse.json({ existing: false, pending: true })
 }
