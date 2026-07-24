@@ -115,7 +115,7 @@ export async function GET(
   // ── Disponibilités du user (pour afficher si dispo pour une activité) ──────
   const { data: userAvailabilities } = await adminSupabase
     .from('availabilities')
-    .select('date, slot_start, slot_end, status, constraint_overrides, pref_overrides')
+    .select('date, slot_start, slot_end, status, constraint_overrides, pref_overrides, start_lat, start_lng')
     .eq('event_id', eventId)
     .eq('user_id', user.id)
 
@@ -207,10 +207,17 @@ export async function GET(
   // activity_prefs ne doit jamais apparaître comme sélectionnable en tant que type racine).
   const knownSubtypeNames = [...new Set((subtypeRows ?? []).map(r => r.name))]
 
+  // Adresse de départ alternative pour CET événement, si renseignée — remplace celle
+  // du profil pour l'affichage de distance, sans jamais modifier le profil permanent.
+  const myStartOverride = (userAvailabilities ?? []).find(a => a.start_lat != null && a.start_lng != null)
+  const effectiveUserProfile = userProfile && myStartOverride
+    ? { ...userProfile, home_lat: myStartOverride.start_lat, home_lng: myStartOverride.start_lng }
+    : userProfile
+
   return NextResponse.json({
     event,
     activities:         activities ?? [],
-    userProfile:        userProfile ?? null,
+    userProfile:        effectiveUserProfile ?? null,
     groupTopTypes,
     groupConstraintsByActivity,
     userAvailabilities: userAvailabilities ?? [],

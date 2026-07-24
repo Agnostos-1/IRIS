@@ -13,6 +13,7 @@ import { createClient } from '@/lib/supabase/browser'
 import Image from 'next/image'
 import Link from 'next/link'
 import InviteLinkBox from '@/components/InviteLinkBox'
+import AddressAutocomplete from '@/components/AddressAutocomplete'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,9 @@ interface Availability {
   probas:      Record<string, number>
   slots:       Record<string, { start: string; end: string }>
   budget?:     number
+  startLat?:      number
+  startLng?:      number
+  startAddress?:  string
   submitted:   boolean
 }
 
@@ -119,6 +123,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
   const [myStatuses, setMyStatuses] = useState<Record<string, 'ok' | 'no' | 'cond'>>({})
   const [myProbas,   setMyProbas]   = useState<Record<string, number>>({})
   const [myBudget,   setMyBudget]   = useState('')
+  const [myStartAddress, setMyStartAddress] = useState('')
+  const [myStartLat,     setMyStartLat]     = useState<number | null>(null)
+  const [myStartLng,     setMyStartLng]     = useState<number | null>(null)
   const [mySlots,    setMySlots]    = useState<Record<string, { start: string; end: string }>>({})
   const [saving,     setSaving]     = useState(false)
 
@@ -198,6 +205,9 @@ export default function EventPage({ params }: { params: Promise<{ id: string }> 
       setMyStatuses(mine.statuses)
       setMyProbas(mine.probas)
       setMyBudget(mine.budget ? String(mine.budget) : '')
+      setMyStartAddress(mine.startAddress ?? '')
+      setMyStartLat(mine.startLat ?? null)
+      setMyStartLng(mine.startLng ?? null)
       setMySlots(mine.slots ?? {})
       setHasSubmitted(mine.submitted)
     }
@@ -346,6 +356,9 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
         probas:    myProbas,
         slots:     mySlots,
         budget:    myBudget ? Number(myBudget) : null,
+        startLat:     myStartLat,
+        startLng:     myStartLng,
+        startAddress: myStartAddress || null,
         submitted: true,
       }),
     })
@@ -908,6 +921,8 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
                   <div style={{ fontSize: 11, color: '#94A3B8', marginBottom: 10 }}>
                     💰 Budget médian du groupe : <strong style={{ color: '#4C1D95' }}>{medianBudget}€</strong>
                     {' '}— les budgets individuels des autres participants restent privés.
+                    {' '}Indicatif uniquement : le moteur IRIS retient le budget le plus bas parmi les
+                    participants pour filtrer les scénarios proposés, pas cette médiane.
                   </div>
                 )}
                 <div style={{ overflowX: 'auto' }}>
@@ -1215,6 +1230,24 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
                 </div>
               )}
 
+              <div style={{ marginBottom: 14 }}>
+                <label style={{
+                  display: 'flex', alignItems: 'center',
+                  fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6,
+                }}>
+                  Je pars d'ailleurs pour cet événement
+                  <Tooltip text="Optionnel. Par défaut, les distances sont calculées depuis l'adresse de votre profil. Utilisez ceci uniquement pour CET événement — par exemple si vous êtes temporairement ailleurs que chez vous." />
+                </label>
+                <AddressAutocomplete
+                  value={myStartAddress}
+                  onChange={(address, lat, lng) => {
+                    setMyStartAddress(address)
+                    setMyStartLat(lat)
+                    setMyStartLng(lng)
+                  }}
+                />
+              </div>
+
               <button
                 onClick={handleSaveAvail}
                 disabled={saving || event.phase >= 3 || Object.keys(myStatuses).length < dates.length}
@@ -1243,17 +1276,10 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
                 <div style={{
                   marginTop: 10, padding: '10px 12px', borderRadius: 10,
                   background: '#EDE9FE', border: '1px solid #DDD6FE',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                 }}>
                   <span style={{ fontSize: 12, color: '#4C1D95' }}>
                     💡 Vous pouvez déjà proposer des activités, sans attendre la clôture des disponibilités.
                   </span>
-                  <Link href={`/event/${eventId}/activities`} style={{
-                    fontSize: 12, fontWeight: 700, color: 'white', background: '#7C3AED',
-                    padding: '6px 12px', borderRadius: 8, textDecoration: 'none', whiteSpace: 'nowrap',
-                  }}>
-                    Proposer →
-                  </Link>
                 </div>
               )}
 

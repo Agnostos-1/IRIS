@@ -119,7 +119,7 @@ export async function POST(
   }
 
   // ── Cas normal : soumission des disponibilités ────────────────────────────
-  const { statuses, probas, slots, budget, submitted } = body
+  const { statuses, probas, slots, budget, startLat, startLng, startAddress, submitted } = body
 
   // Récupère les overrides déjà stockés pour les conserver sur chaque ligne
   const { data: existingRows } = await adminSupabase
@@ -145,6 +145,9 @@ export async function POST(
     slot_start:           (slots as Record<string, { start: string; end: string }>)[date]?.start ?? null,
     slot_end:             (slots as Record<string, { start: string; end: string }>)[date]?.end ?? null,
     budget_personal:      budget ?? null,
+    start_lat:            startLat ?? null,
+    start_lng:            startLng ?? null,
+    start_address:        startAddress ?? null,
     submitted:            submitted ?? false,
     constraint_overrides: overridesByDate[date] ?? globalOverrides,
     pref_overrides:       existingPrefOverrides,

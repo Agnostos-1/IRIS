@@ -84,7 +84,7 @@ export async function GET(
   // Récupère les disponibilités existantes (tous ceux qui ont soumis, pas seulement les membres)
   const { data: availRows } = await adminSupabase
     .from('availabilities')
-    .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, submitted')
+    .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, start_lat, start_lng, start_address, submitted')
     .eq('event_id', id)
     .neq('date', '1970-01-01')
 
@@ -118,6 +118,9 @@ export async function GET(
     probas:   Record<string, number>
     slots:    Record<string, { start: string; end: string }>
     budget?:  number
+    startLat?: number
+    startLng?: number
+    startAddress?: string
     submitted: boolean
   }> = {}
 
@@ -131,18 +134,26 @@ export async function GET(
       availMap[row.user_id].slots[row.date] = { start: row.slot_start, end: row.slot_end }
     }
     if (row.budget_personal) availMap[row.user_id].budget = row.budget_personal
+    if (row.start_lat != null && row.start_lng != null) {
+      availMap[row.user_id].startLat = row.start_lat
+      availMap[row.user_id].startLng = row.start_lng
+      availMap[row.user_id].startAddress = row.start_address ?? undefined
+    }
     if (row.submitted) availMap[row.user_id].submitted = true
   })
 
   const availabilities = participants.map(p => ({
     userId:      p.userId,
     displayName: p.displayName,
-    // Email et budget réel : uniquement pour SA PROPRE ligne, jamais celle d'autrui.
+    // Email, budget et adresse de départ réels : uniquement pour SA PROPRE ligne, jamais celle d'autrui.
     email:       p.userId === user.id ? p.email : undefined,
     statuses:    availMap[p.userId]?.statuses ?? {},
     probas:      availMap[p.userId]?.probas   ?? {},
     slots:       availMap[p.userId]?.slots    ?? {},
     budget:      p.userId === user.id ? availMap[p.userId]?.budget : undefined,
+    startLat:      p.userId === user.id ? availMap[p.userId]?.startLat : undefined,
+    startLng:      p.userId === user.id ? availMap[p.userId]?.startLng : undefined,
+    startAddress:  p.userId === user.id ? availMap[p.userId]?.startAddress : undefined,
     submitted:   availMap[p.userId]?.submitted ?? false,
   }))
 

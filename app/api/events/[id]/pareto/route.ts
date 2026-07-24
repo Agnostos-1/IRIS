@@ -59,12 +59,25 @@ export async function GET(
   const { data: availabilities } = memberIds.length > 0
     ? await adminSupabase
         .from('availabilities')
-        .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, constraint_overrides')
+        .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, start_lat, start_lng, constraint_overrides')
         .eq('event_id', eventId)
         .in('user_id', memberIds)
     : { data: [] }
 
   const avails = (availabilities ?? []).filter(a => a.date !== '1970-01-01') as DBAvailability[]
+
+  // Adresse de départ alternative pour CET événement, si renseignée — remplace celle
+  // du profil pour le calcul de distance, sans jamais modifier le profil permanent.
+  const startOverrideByUser = new Map<string, { lat: number; lng: number }>()
+  for (const row of (availabilities ?? [])) {
+    if (row.start_lat != null && row.start_lng != null) {
+      startOverrideByUser.set(row.user_id, { lat: row.start_lat, lng: row.start_lng })
+    }
+  }
+  const users = (profiles ?? []).map(p => {
+    const override = startOverrideByUser.get(p.id)
+    return override ? { ...p, home_lat: override.lat, home_lng: override.lng } : p
+  }) as DBUser[]
 
   const selectedDate = event.selected_date as DateObj | null
   const rawDates: DateObj[] = selectedDate
@@ -76,7 +89,7 @@ export async function GET(
   const { scenarios } = generateEventScenarios({
     rawDates,
     activities:   activities as DBActivity[],
-    users:        (profiles ?? []) as DBUser[],
+    users,
     avails,
     budgetGlobal: event.budget_global,
   })
@@ -239,12 +252,26 @@ export async function PATCH(
     const { data: availabilities } = memberIds.length > 0
       ? await adminSupabase
           .from('availabilities')
-          .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, constraint_overrides')
+          .select('user_id, date, status, probability, slot_start, slot_end, budget_personal, start_lat, start_lng, constraint_overrides')
           .eq('event_id', eventId)
           .in('user_id', memberIds)
       : { data: [] }
 
     const avails = (availabilities ?? []).filter((a: { date: string }) => a.date !== '1970-01-01') as DBAvailability[]
+
+    // Adresse de départ alternative pour CET événement, si renseignée — remplace celle
+    // du profil pour le calcul de distance, sans jamais modifier le profil permanent.
+    const startOverrideByUser = new Map<string, { lat: number; lng: number }>()
+    for (const row of (availabilities ?? [])) {
+      if (row.start_lat != null && row.start_lng != null) {
+        startOverrideByUser.set(row.user_id, { lat: row.start_lat, lng: row.start_lng })
+      }
+    }
+    const users = (profiles ?? []).map(p => {
+      const override = startOverrideByUser.get(p.id)
+      return override ? { ...p, home_lat: override.lat, home_lng: override.lng } : p
+    }) as DBUser[]
+
     const selectedDate = event.selected_date as DateObj | null
     const rawDates: DateObj[] = selectedDate
       ? [selectedDate]
@@ -255,7 +282,7 @@ export async function PATCH(
     const { scenarios } = generateEventScenarios({
       rawDates,
       activities:   (activities ?? []) as DBActivity[],
-      users:        (profiles ?? []) as DBUser[],
+      users,
       avails,
       budgetGlobal: event.budget_global,
     })
