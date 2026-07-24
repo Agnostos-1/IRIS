@@ -1310,17 +1310,19 @@ function SyncModal({
                   </span>
                 </div>
                 <div style={{ display: 'grid', gap: 8 }}>
-                  {d.oldVal !== null && (
-                    <label style={optionStyle(dec.action === 'update')}>
-                      <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'update'}
-                        onChange={() => setAction(d.type, 'update')} style={{ marginTop: 3 }}
-                      />
-                      <span>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>Mettre à jour "{d.type}" → {d.newVal}%</div>
-                        <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>Écrase la valeur existante dans votre profil.</div>
-                      </span>
-                    </label>
-                  )}
+                  <label style={optionStyle(dec.action === 'update')}>
+                    <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'update'}
+                      onChange={() => setAction(d.type, 'update')} style={{ marginTop: 3 }}
+                    />
+                    <span>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
+                        {d.oldVal !== null ? `Mettre à jour "${d.type}" → ${d.newVal}%` : `Ajouter "${d.type}" à mon profil → ${d.newVal}%`}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748B', marginTop: 2 }}>
+                        {d.oldVal !== null ? 'Écrase la valeur existante dans votre profil.' : 'Ajoute cette préférence à votre profil.'}
+                      </div>
+                    </span>
+                  </label>
                   {!d.isSubtype && (
                     <label style={optionStyle(dec.action === 'create_subtype')}>
                       <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'create_subtype'}
@@ -1551,11 +1553,16 @@ export default function ActivitiesPage() {
     if (!data?.userProfile) { setSyncModal(false); if (syncThenClose) await doClosePhase(); return }
 
     const updatedPrefs = { ...data.userProfile.activity_prefs }
+    // Seuls les types réellement résolus (update/create_subtype) doivent disparaître
+    // des overrides locaux — un type "ignoré" reste une divergence bien réelle avec
+    // le profil (déjà persistée côté serveur), pas quelque chose à oublier localement.
+    const resolvedTypes = new Set<string>()
     for (const [type, dec] of Object.entries(decisions)) {
       const diff = syncDiffs.find(d => d.type === type)
       if (!diff) continue
       if (dec.action === 'update') {
         updatedPrefs[type] = diff.newVal
+        resolvedTypes.add(type)
       } else if (dec.action === 'create_subtype') {
         const subtype = normalizeTypeName(dec.subtype || type)
         updatedPrefs[subtype] = diff.newVal
@@ -1566,8 +1573,9 @@ export default function ActivitiesPage() {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ parent_type: type, name: subtype }),
         }).catch(() => {})
+        resolvedTypes.add(type)
       }
-      // 'skip' → nothing
+      // 'skip' → rien à résoudre, l'override local reste en place
     }
 
     await fetch('/api/profile', {
@@ -1579,8 +1587,12 @@ export default function ActivitiesPage() {
     // Reflète immédiatement le nouveau profil localement — sans ça, l'affichage
     // resterait périmé jusqu'au prochain rechargement complet de la page.
     setData(prev => prev ? { ...prev, userProfile: { ...prev.userProfile!, activity_prefs: updatedPrefs } } : prev)
-    localPrefsRef.current = {}
-    setMyPrefOverrides({})
+    for (const type of resolvedTypes) delete localPrefsRef.current[type]
+    setMyPrefOverrides(prev => {
+      const next = { ...prev }
+      for (const type of resolvedTypes) delete next[type]
+      return next
+    })
 
     setSyncModal(false)
     if (syncThenClose) await doClosePhase()
