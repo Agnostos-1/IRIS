@@ -122,7 +122,8 @@ export default async function DashboardPage() {
 
   // Événements liés aux groupes où je suis invité ET où je n'ai pas encore répondu
   const pendingEvents = events?.filter(e =>
-    invitedGroupIds.includes(e.group_id)
+    (e.group_id && invitedGroupIds.includes(e.group_id)) ||
+    toIdArray(e.group_ids).some(gid => invitedGroupIds.includes(gid))
   ) ?? []
 
   const displayName    = profile?.display_name ?? user.email?.split('@')[0] ?? 'vous'

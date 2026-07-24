@@ -23,7 +23,7 @@ export default async function JoinPage({
   // Vérifie que l'événement existe via le code d'invitation
   const { data: ev } = await adminSupabase
     .from('events')
-    .select('id, name, description, phase, invite_code, group_id, groups(name)')
+    .select('id, name, description, phase, invite_code, group_id, group_ids, groups(name)')
     .eq('invite_code', code.toUpperCase())
     .single()
 
@@ -86,6 +86,20 @@ export default async function JoinPage({
       .from('events')
       .update({ extra_emails: [...extras, user.email] })
       .eq('id', ev.id)
+  }
+
+  // Si cette personne a déjà une invitation de groupe en attente pour un groupe lié
+  // à cet événement (ex. ajoutée par l'organisateur mais jamais passée par le lien de
+  // groupe), on la finalise ici — on ne crée jamais de nouvelle adhésion par ce lien
+  // (cf. commentaire ci-dessus), on complète seulement une invitation déjà existante.
+  const eventGroupIds: string[] = ev.group_ids?.length ? ev.group_ids : (ev.group_id ? [ev.group_id] : [])
+  if (eventGroupIds.length > 0) {
+    await adminSupabase
+      .from('group_members')
+      .update({ status: 'active', joined_at: new Date().toISOString() })
+      .eq('user_id', user.id)
+      .in('group_id', eventGroupIds)
+      .eq('status', 'invited')
   }
 
   // Redirige vers la page de l'événement
