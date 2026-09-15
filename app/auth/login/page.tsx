@@ -25,76 +25,105 @@ export default function LoginPage() {
   const [status,   setStatus]   = useState<Status>('idle')
   const [errorMsg, setErrorMsg] = useState('')
 
+  // Validité du formulaire affiché, lue depuis le DOM plutôt que déduite de
+  // l'état React : l'événement input remonte depuis n'importe quel champ, y
+  // compris lors d'un remplissage automatique. checkValidity() tient compte du
+  // format de l'email et de la longueur minimale du mot de passe — donc le
+  // bouton ne s'active que sur une saisie réellement valide, et plus seulement
+  // non vide.
+  const [formOk, setFormOk] = useState(false)
+  const checkForm = (e: React.FormEvent<HTMLFormElement>) =>
+    setFormOk(e.currentTarget.checkValidity())
+
   const [next, setNext] = useState('/dashboard')
   useEffect(() => {
     setNext(new URLSearchParams(window.location.search).get('next') ?? '/dashboard')
   }, [])
 
-  async function handlePassword(e: React.FormEvent) {
+  async function handlePassword(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!email.trim() || !password.trim()) return
+    // Les valeurs sont relues depuis le formulaire plutôt que depuis l'état :
+    // un gestionnaire de mots de passe peut remplir les champs sans déclencher
+    // onChange, auquel cas l'état React resterait vide.
+    const form     = new FormData(e.currentTarget)
+    const mail     = String(form.get('email') ?? email).trim().toLowerCase()
+    const passwd   = String(form.get('password') ?? password)
+    if (!mail || !passwd) return
     setStatus('loading')
     setErrorMsg('')
 
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    if (isSignUp) {
-      // Inscription
-      const { error } = await supabase.auth.signUp({
-        email:    email.trim().toLowerCase(),
-        password: password,
-        options:  { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      if (isSignUp) {
+        // Inscription
+        const { error } = await supabase.auth.signUp({
+          email:    mail,
+          password: passwd,
+          options:  { emailRedirectTo: `${window.location.origin}/auth/callback` },
+        })
+        if (error) {
+          setStatus('error')
+          setErrorMsg(error.message)
+        } else {
+          // Le compte est créé mais nécessite une confirmation par email
+          // (paramètre "Confirm email" activé côté Supabase) avant de pouvoir se connecter.
+          setStatus('confirm-email')
+        }
+      } else {
+        // Connexion
+        const { error } = await supabase.auth.signInWithPassword({
+          email:    mail,
+          password: passwd,
+        })
+        if (error) {
+          if (error.message === 'Email not confirmed') {
+            setStatus('confirm-email')
+          } else {
+            setStatus('error')
+            setErrorMsg(
+              error.message === 'Invalid login credentials'
+                ? 'Email ou mot de passe incorrect.'
+                : error.message
+            )
+          }
+        } else {
+          router.push(next)
+        }
+      }
+    } catch {
+      // Coupure réseau, requête avortée… Sans ce filet, status resterait sur
+      // 'loading' et le bouton serait grisé jusqu'au rechargement de la page.
+      setStatus('error')
+      setErrorMsg('Connexion au serveur impossible. Vérifiez votre réseau, puis réessayez.')
+    }
+  }
+
+  async function handleMagicLink(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    const mail = String(new FormData(e.currentTarget).get('email') ?? email).trim().toLowerCase()
+    if (!mail) return
+    setStatus('loading')
+    setErrorMsg('')
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithOtp({
+        email: mail,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          shouldCreateUser: true,
+        },
       })
       if (error) {
         setStatus('error')
         setErrorMsg(error.message)
       } else {
-        // Le compte est créé mais nécessite une confirmation par email
-        // (paramètre "Confirm email" activé côté Supabase) avant de pouvoir se connecter.
-        setStatus('confirm-email')
+        setStatus('sent')
       }
-    } else {
-      // Connexion
-      const { error } = await supabase.auth.signInWithPassword({
-        email:    email.trim().toLowerCase(),
-        password: password,
-      })
-      if (error) {
-        if (error.message === 'Email not confirmed') {
-          setStatus('confirm-email')
-        } else {
-          setStatus('error')
-          setErrorMsg(
-            error.message === 'Invalid login credentials'
-              ? 'Email ou mot de passe incorrect.'
-              : error.message
-          )
-        }
-      } else {
-        router.push(next)
-      }
-    }
-  }
-
-  async function handleMagicLink(e: React.FormEvent) {
-    e.preventDefault()
-    if (!email.trim()) return
-    setStatus('loading')
-    setErrorMsg('')
-
-    const supabase = createClient()
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim().toLowerCase(),
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        shouldCreateUser: true,
-      },
-    })
-    if (error) {
+    } catch {
       setStatus('error')
-      setErrorMsg(error.message)
-    } else {
-      setStatus('sent')
+      setErrorMsg('Connexion au serveur impossible. Vérifiez votre réseau, puis réessayez.')
     }
   }
 
@@ -170,7 +199,7 @@ export default function LoginPage() {
           borderRadius: 10, padding: 3, marginBottom: 24, gap: 3,
         }}>
           {(['password', 'magic'] as Mode[]).map(m => (
-            <button key={m} onClick={() => { setMode(m); setStatus('idle'); setErrorMsg('') }}
+            <button key={m} onClick={() => { setMode(m); setStatus('idle'); setErrorMsg(''); setFormOk(false) }}
               style={{
                 flex: 1, padding: '8px 0', borderRadius: 8, border: 'none',
                 fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -205,13 +234,14 @@ export default function LoginPage() {
         )}
 
         {mode === 'password' && status !== 'confirm-email' && (
-          <form onSubmit={handlePassword}>
+          <form onSubmit={handlePassword} onInput={checkForm}>
             <div style={{ marginBottom: 14 }}>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600,
                 color: '#374151', marginBottom: 6 }}>
                 Email
               </label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              <input type="email" name="email" autoComplete="email"
+                value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="vous@exemple.com" required autoFocus
                 disabled={status === 'loading'} style={inputStyle}/>
             </div>
@@ -221,7 +251,9 @@ export default function LoginPage() {
                 color: '#374151', marginBottom: 6 }}>
                 Mot de passe
               </label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              <input type="password" name="password"
+                autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                value={password} onChange={e => setPassword(e.target.value)}
                 placeholder={isSignUp ? 'Choisissez un mot de passe' : '••••••••'}
                 required minLength={6} disabled={status === 'loading'} style={inputStyle}/>
               {isSignUp && (
@@ -246,15 +278,15 @@ export default function LoginPage() {
 				  </Link>
 			  </div>
 
-            <button type="submit" disabled={status === 'loading' || !email || !password}
+            <button type="submit" disabled={status === 'loading' || !formOk}
               style={{
                 width: '100%', padding: '12px', borderRadius: 10, border: 'none',
-                background: status === 'loading' || !email || !password
+                background: status === 'loading' || !formOk
                   ? '#E2E8F0'
                   : 'linear-gradient(135deg, #4C1D95, #6D28D9)',
-                color: status === 'loading' || !email || !password ? '#94A3B8' : 'white',
+                color: status === 'loading' || !formOk ? '#94A3B8' : 'white',
                 fontSize: 15, fontWeight: 700,
-                cursor: status === 'loading' || !email || !password ? 'default' : 'pointer',
+                cursor: status === 'loading' || !formOk ? 'default' : 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               }}>
               {status === 'loading' ? (
@@ -275,7 +307,7 @@ export default function LoginPage() {
 
             <div style={{ textAlign: 'center', marginTop: 16 }}>
               <button type="button"
-                onClick={() => { setIsSignUp(!isSignUp); setStatus('idle'); setErrorMsg('') }}
+                onClick={() => { setIsSignUp(!isSignUp); setStatus('idle'); setErrorMsg(''); setFormOk(false) }}
                 style={{
                   background: 'none', border: 'none', cursor: 'pointer',
                   fontSize: 13, color: '#7C3AED', fontWeight: 500,
@@ -306,13 +338,14 @@ export default function LoginPage() {
               </button>
             </div>
           ) : (
-            <form onSubmit={handleMagicLink}>
+            <form onSubmit={handleMagicLink} onInput={checkForm}>
               <div style={{ marginBottom: 16 }}>
                 <label style={{ display: 'block', fontSize: 13, fontWeight: 600,
                   color: '#374151', marginBottom: 6 }}>
                   Adresse email
                 </label>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                <input type="email" name="email" autoComplete="email"
+                  value={email} onChange={e => setEmail(e.target.value)}
                   placeholder="vous@exemple.com" required autoFocus
                   disabled={status === 'loading'} style={inputStyle}/>
               </div>
@@ -332,14 +365,14 @@ export default function LoginPage() {
 				  </Link>
 			  </div>
 
-              <button type="submit" disabled={status === 'loading' || !email}
+              <button type="submit" disabled={status === 'loading' || !formOk}
                 style={{
                   width: '100%', padding: '12px', borderRadius: 10, border: 'none',
-                  background: status === 'loading' || !email ? '#E2E8F0'
+                  background: status === 'loading' || !formOk ? '#E2E8F0'
                     : 'linear-gradient(135deg, #4C1D95, #6D28D9)',
-                  color: status === 'loading' || !email ? '#94A3B8' : 'white',
+                  color: status === 'loading' || !formOk ? '#94A3B8' : 'white',
                   fontSize: 15, fontWeight: 700,
-                  cursor: status === 'loading' || !email ? 'default' : 'pointer',
+                  cursor: status === 'loading' || !formOk ? 'default' : 'pointer',
                 }}>
                 {status === 'loading' ? 'Envoi…' : 'Recevoir mon lien'}
               </button>
