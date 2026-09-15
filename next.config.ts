@@ -10,6 +10,18 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname),
   },
+
+  // Origines autorisées à charger les ressources de développement (rechargement
+  // à chaud). Sans ça, tester depuis un téléphone — réseau local ou tunnel —
+  // fait échouer la liaison HMR, ce qui déclenche une boucle de rechargement de
+  // la page. Sans effet en production.
+  // La liste peut être surchargée via DEV_ORIGINS (valeurs séparées par des
+  // virgules) quand l'IP locale change ou pour un autre type de tunnel.
+  allowedDevOrigins: process.env.DEV_ORIGINS?.split(',').map(o => o.trim()) ?? [
+    '*.trycloudflare.com',
+    '*.ngrok-free.app',
+    '192.168.1.118',
+  ],
 };
 
 export default nextConfig;
