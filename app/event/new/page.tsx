@@ -108,7 +108,7 @@ function AutoGroupPopup({ extraEmails, onConfirm, onSkip, onCancel, mode }: Auto
     }}>
       <div style={{
         background: 'white', borderRadius: 16, padding: '28px 28px',
-        maxWidth: 440, width: '100%',
+        maxWidth: 440, width: '100%', maxHeight: '85dvh', overflowY: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       }}>
         <div style={{ fontSize: 32, marginBottom: 12, textAlign: 'center' }}>👥</div>

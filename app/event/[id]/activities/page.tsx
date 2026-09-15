@@ -1281,7 +1281,7 @@ function SyncModal({
     }}>
       <div style={{
         background: 'white', borderRadius: 16, padding: '24px 28px',
-        maxWidth: 520, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+        maxWidth: 520, width: '100%', maxHeight: '85dvh', overflowY: 'auto',
         boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
       }}>
         <h3 style={{ fontSize: 17, fontWeight: 800, color: '#4C1D95', margin: '0 0 6px' }}>
@@ -1295,16 +1295,20 @@ function SyncModal({
         <div style={{ display: 'grid', gap: 16 }}>
           {diffs.map(d => {
             const dec = decisions[d.type]
+            // minWidth 0 + overflowWrap anywhere : sans ça, un nom de type sans
+            // espaces ne peut pas rétrécir sous sa largeur intrinsèque (règle
+            // min-width:auto des enfants flex) et déborde la modale sur la droite.
             const optionStyle = (selected: boolean): React.CSSProperties => ({
               display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer',
-              padding: '10px 12px', borderRadius: 9,
+              padding: '10px 12px', borderRadius: 9, minWidth: 0,
               border: `1.5px solid ${selected ? '#7C3AED' : '#E2E8F0'}`,
               background: selected ? '#F5F3FF' : 'white',
             })
+            const texteStyle: React.CSSProperties = { flex: 1, minWidth: 0, overflowWrap: 'anywhere' }
             return (
-              <div key={d.type} style={{ padding: '14px 16px', borderRadius: 12, background: '#F8FAFC', border: '1px solid #E2E8F0' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1E293B' }}>{d.type}</span>
+              <div key={d.type} style={{ padding: '14px 16px', borderRadius: 12, background: '#F8FAFC', border: '1px solid #E2E8F0', minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1E293B', minWidth: 0, overflowWrap: 'anywhere' }}>{d.type}</span>
                   <span style={{ fontSize: 12, color: '#64748B' }}>
                     {d.oldVal !== null ? `${d.oldVal}%` : '—'} → <strong style={{ color: '#4C1D95' }}>{d.newVal}%</strong>
                   </span>
@@ -1314,7 +1318,7 @@ function SyncModal({
                     <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'update'}
                       onChange={() => setAction(d.type, 'update')} style={{ marginTop: 3 }}
                     />
-                    <span>
+                    <span style={texteStyle}>
                       <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
                         {d.oldVal !== null ? `Mettre à jour "${d.type}" → ${d.newVal}%` : `Ajouter "${d.type}" à mon profil → ${d.newVal}%`}
                       </div>
@@ -1328,7 +1332,7 @@ function SyncModal({
                       <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'create_subtype'}
                         onChange={() => setAction(d.type, 'create_subtype')} style={{ marginTop: 3 }}
                       />
-                      <span style={{ flex: 1 }}>
+                      <span style={texteStyle}>
                         <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>
                           {d.oldVal !== null ? `Créer comme sous-type de "${d.type}"` : `Ajouter au profil comme sous-type de "${d.type}"`}
                         </div>
@@ -1357,7 +1361,7 @@ function SyncModal({
                     <input type="radio" name={`sync-${d.type}`} checked={dec.action === 'skip'}
                       onChange={() => setAction(d.type, 'skip')} style={{ marginTop: 3 }}
                     />
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B' }}>Ne rien changer pour "{d.type}"</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: '#1E293B', ...texteStyle }}>Ne rien changer pour "{d.type}"</div>
                   </label>
                 </div>
               </div>
@@ -1365,7 +1369,7 @@ function SyncModal({
           })}
         </div>
 
-        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 10, marginTop: 20, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={onClose} style={{
             padding: '9px 18px', borderRadius: 9, border: '1.5px solid #E2E8F0',
             background: 'white', color: '#64748B', fontSize: 13, cursor: 'pointer',

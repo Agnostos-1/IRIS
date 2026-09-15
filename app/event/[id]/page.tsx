@@ -509,7 +509,7 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
         }}>
           <div style={{
             background: 'white', borderRadius: 16, padding: '28px',
-            maxWidth: 420, width: '100%',
+            maxWidth: 420, width: '100%', maxHeight: '85dvh', overflowY: 'auto',
             boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           }}>
             {groupAssignment ? (
@@ -1629,7 +1629,7 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
                 position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200, padding: 24,
               }}>
-                <div style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%' }}>
+                <div style={{ background: 'white', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', maxHeight: '85dvh', overflowY: 'auto' }}>
                   <h2 style={{ fontSize: 17, fontWeight: 700, color: '#1E293B', textAlign: 'center', marginBottom: 8 }}>
                     Annuler définitivement cet événement ?
                   </h2>
@@ -1681,7 +1681,7 @@ function dateScore(date: string): { score: number; ok: number; cond: number; no:
         }}>
           <div style={{
             background: 'white', borderRadius: 16, padding: '24px 26px',
-            maxWidth: 520, width: '100%', maxHeight: '80vh', overflowY: 'auto',
+            maxWidth: 520, width: '100%', maxHeight: '85dvh', overflowY: 'auto',
           }}>
             <h2 style={{ fontSize: 17, fontWeight: 800, color: '#1E293B', margin: '0 0 8px' }}>
               La phase Activités est clôturée
