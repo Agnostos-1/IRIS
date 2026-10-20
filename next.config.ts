@@ -22,6 +22,24 @@ const nextConfig: NextConfig = {
     '*.ngrok-free.app',
     '192.168.1.118',
   ],
+
+  async headers() {
+    return [
+      {
+        // Servi depuis /app/sw.js, le service worker n'aurait par défaut que
+        // la portée /app/ — insuffisante pour couvrir /app, la page de
+        // démarrage déclarée au manifeste. Sans ce contrôle, Android refuse
+        // de proposer l'installation.
+        source: '/app/sw.js',
+        headers: [
+          { key: 'Service-Worker-Allowed', value: '/app' },
+          // Le fichier doit pouvoir être remplacé sans attendre l'expiration
+          // d'un cache, sous peine de figer les utilisateurs sur une version.
+          { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
+        ],
+      },
+    ]
+  },
 };
 
 export default nextConfig;

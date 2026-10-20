@@ -49,7 +49,12 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // app/sw.js et le manifeste doivent rester accessibles sans session :
+    // Android les récupère avant toute connexion, et une redirection vers la
+    // page de login suffit à faire échouer l'installation de l'application.
+    // Les images étaient déjà exclues, d'où des icônes qui répondaient
+    // correctement alors que le manifeste, lui, renvoyait une redirection.
+    '/((?!_next/static|_next/image|favicon.ico|app/sw\\.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)',
   ],
 }
 

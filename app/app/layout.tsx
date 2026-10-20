@@ -7,11 +7,27 @@
 
 import type { Metadata, Viewport } from 'next'
 import BottomNav from './_components/BottomNav'
+import RegisterSW from './_components/RegisterSW'
 import './app-theme.css'
 
+// Le manifeste est déclaré ici et non à la racine : la balise n'apparaît donc
+// que sur les routes /app, et le site web ne devient pas installable.
 export const metadata: Metadata = {
   title: 'IRIS',
   description: 'Décider ensemble, équitablement.',
+  manifest: '/app/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'IRIS',
+    statusBarStyle: 'black-translucent',
+  },
+  icons: {
+    icon: [
+      { url: '/app/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/app/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/app/apple-touch-icon.png',
+  },
 }
 
 // viewport-fit=cover est nécessaire pour que env(safe-area-inset-*) renvoie
@@ -47,6 +63,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
 
       <BottomNav />
+      <RegisterSW />
     </div>
   )
 }
