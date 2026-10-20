@@ -1,0 +1,126 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+ * Copyright (C) 2026
+ *
+ * Thème de l'application mobile.
+ *
+ * Toutes les règles sont portées par .iris-app : ce fichier n'est importé que
+ * par le layout de /app, et rien ici ne peut atteindre les pages du site web,
+ * qui gardent leur apparence actuelle.
+ *
+ * L'application est sombre par défaut — décision produit, distincte du web.
+ * Le mode clair s'obtient avec data-theme="light" sur le même élément.
+ */
+
+.iris-app {
+  color-scheme: dark;
+
+  /* Fonds, du plus profond au plus élevé */
+  --app-bg:          #0B0714;
+  --app-bg-elev:     #130C22;
+  --app-surface:     #1A1130;
+  --app-surface-2:   #231738;
+
+  /* Bordures */
+  --app-border:        #2E2049;
+  --app-border-strong: #3D2B61;
+
+  /* Textes */
+  --app-text:       #F4F1FB;
+  --app-text-muted: #A99BC4;
+  --app-text-dim:   #7A6D96;
+
+  /* Identité violette */
+  --app-primary:        #8B5CF6;
+  --app-primary-strong: #7C3AED;
+  --app-primary-dim:    #5B21B6;
+  --app-on-primary:     #FFFFFF;
+  --app-accent:         #E879F9;
+
+  /* États */
+  --app-success: #34D399;
+  --app-warning: #FBBF24;
+  --app-danger:  #F87171;
+
+  --app-grad:        linear-gradient(135deg, #7C3AED, #A855F7);
+  --app-grad-accent: linear-gradient(135deg, #A855F7, #EC4899);
+
+  /* Échelle typographique — volontairement réduite à six degrés.
+     Le site en compte douze, c'est l'une des causes de son illisibilité
+     sur petit écran. */
+  --app-text-xs:   12px;
+  --app-text-sm:   13px;
+  --app-text-base: 15px;
+  --app-text-lg:   18px;
+  --app-text-xl:   22px;
+  --app-text-2xl:  28px;
+
+  /* Espacements */
+  --app-space-1: 4px;
+  --app-space-2: 8px;
+  --app-space-3: 12px;
+  --app-space-4: 16px;
+  --app-space-5: 20px;
+  --app-space-6: 24px;
+  --app-space-8: 32px;
+
+  /* Rayons — quatre degrés au lieu des huit du site */
+  --app-radius-sm: 10px;
+  --app-radius:    16px;
+  --app-radius-lg: 22px;
+  --app-radius-full: 999px;
+
+  --app-shadow:    0 8px 32px rgba(0, 0, 0, 0.45);
+  --app-shadow-sm: 0 2px 12px rgba(0, 0, 0, 0.3);
+
+  /* Hauteur de la barre d'onglets, pour que les pages réservent la place */
+  --app-nav-height: 62px;
+
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.iris-app[data-theme="light"] {
+  color-scheme: light;
+
+  --app-bg:        #FAF8FF;
+  --app-bg-elev:   #FFFFFF;
+  --app-surface:   #FFFFFF;
+  --app-surface-2: #F5F3FF;
+
+  --app-border:        #E9E3F7;
+  --app-border-strong: #DDD6FE;
+
+  --app-text:       #1A1130;
+  --app-text-muted: #6B5F8A;
+  --app-text-dim:   #9289AC;
+
+  --app-primary:        #7C3AED;
+  --app-primary-strong: #6D28D9;
+  --app-primary-dim:    #DDD6FE;
+
+  --app-shadow:    0 8px 32px rgba(76, 29, 149, 0.1);
+  --app-shadow-sm: 0 2px 12px rgba(76, 29, 149, 0.08);
+}
+
+/* Les champs de saisie sous 16px déclenchent un zoom automatique sur iOS.
+   Android n'est pas concerné, mais la règle ne coûte rien et évitera une
+   reprise le jour où iOS entrera dans le périmètre. */
+.iris-app input,
+.iris-app select,
+.iris-app textarea {
+  font-size: 16px;
+  font-family: inherit;
+}
+
+/* Cible tactile minimale recommandée. */
+.iris-app button,
+.iris-app a[role="button"] {
+  min-height: 44px;
+  font-family: inherit;
+}
+
+.iris-app ::selection {
+  background: var(--app-primary);
+  color: var(--app-on-primary);
+}
