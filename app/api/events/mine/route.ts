@@ -32,7 +32,7 @@ export async function GET(req: Request) {
 
   let query = adminSupabase
     .from('events')
-    .select('id, name, selected_date, proposed_dates, created_at, created_by, group_id, group_ids, invited_member_ids, extra_emails, groups(name)')
+    .select('id, name, phase, selected_date, proposed_dates, created_at, created_by, group_id, group_ids, invited_member_ids, extra_emails, groups(name)')
     .order('created_at', { ascending: false })
     .limit(200)
 
@@ -69,6 +69,9 @@ export async function GET(req: Request) {
       name:      e.name,
       groupName: (e.groups as unknown as { name: string } | null)?.name ?? null,
       dateLabel: selectedDate?.label ?? selectedDate?.date ?? firstProposed ?? null,
+      // Ajouté pour la liste de l'application : la phase est le repère central
+      // d'IRIS. Le sélecteur de duplication, seul autre consommateur, l'ignore.
+      phase:     (e.phase as number) ?? 0,
     }
   })
 
