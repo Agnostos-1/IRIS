@@ -184,3 +184,71 @@ export async function enregistrerProfil(profil: ProfilComplet): Promise<void> {
     )
   }
 }
+
+// ─── Types d'activité ────────────────────────────────────────────────────────
+
+/**
+ * Mêmes clés que la page Profil du web — ce sont elles qui sont stockées dans
+ * activity_prefs et lues par le moteur. Les libellés sont repris tels quels,
+ * sans leurs emoji.
+ */
+export const TYPES_ACTIVITE_PAR_DEFAUT: { cle: string; libelle: string }[] = [
+  { cle: 'Escape Game', libelle: 'Escape Game' },
+  { cle: 'Musée',       libelle: 'Musée / Culture' },
+  { cle: 'Restaurant',  libelle: 'Restaurant' },
+  { cle: 'Sport',       libelle: 'Sport / Plein air' },
+  { cle: 'Détente',     libelle: 'Détente / Bien-être' },
+  { cle: 'Spectacle',   libelle: 'Spectacle / Concert' },
+  { cle: 'Jeux',        libelle: 'Jeux / Bowling' },
+  { cle: 'Cinéma',      libelle: 'Cinéma' },
+  { cle: 'Karaoké',     libelle: 'Karaoké' },
+  { cle: 'Gastronomie', libelle: 'Gastronomie / Dégustation' },
+  { cle: 'Randonnée',   libelle: 'Randonnée / Nature' },
+  { cle: 'Visite',      libelle: 'Visite guidée / Tourisme' },
+  { cle: 'Atelier',     libelle: 'Atelier créatif' },
+  { cle: 'Pique-nique', libelle: 'Pique-nique / Plein air' },
+  { cle: 'Soirée',      libelle: 'Soirée / Bar' },
+  { cle: 'Shopping',    libelle: 'Shopping' },
+]
+
+/** Valeur neutre appliquée à un type jamais renseigné, comme sur le web. */
+export const PREFERENCE_NEUTRE = 50
+
+/**
+ * Types à afficher : les seize types racine, suivis de ceux que la personne a
+ * déjà notés et qui n'en font pas partie (sous-types créés dans un événement).
+ */
+export function listerTypesActivite(
+  prefs: Record<string, number> | null,
+): { cle: string; libelle: string; personnalise: boolean }[] {
+  const racines = TYPES_ACTIVITE_PAR_DEFAUT.map(t => ({ ...t, personnalise: false }))
+  const supplementaires = Object.keys(prefs ?? {})
+    .filter(cle => !TYPES_ACTIVITE_PAR_DEFAUT.some(t => t.cle === cle))
+    .sort((a, b) => a.localeCompare(b, 'fr'))
+    .map(cle => ({ cle, libelle: cle, personnalise: true }))
+  return [...racines, ...supplementaires]
+}
+
+// ─── Géocodage ───────────────────────────────────────────────────────────────
+
+export type AdresseTrouvee = { libelle: string; lat: number; lng: number }
+
+/**
+ * Recherche d'adresse via Nominatim, le même service que le composant
+ * d'autocomplétion du web, pour que les deux interfaces résolvent une adresse
+ * de la même manière.
+ */
+export async function rechercherAdresse(requete: string): Promise<AdresseTrouvee[]> {
+  if (requete.trim().length < 3) return []
+  const reponse = await fetch(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=5&addressdetails=1&q=${encodeURIComponent(requete)}`,
+    { headers: { 'Accept-Language': 'fr' } },
+  )
+  if (!reponse.ok) throw new Error('Recherche indisponible')
+  const resultats: { display_name: string; lat: string; lon: string }[] = await reponse.json()
+  return resultats.map(r => ({
+    libelle: r.display_name,
+    lat: Number(r.lat),
+    lng: Number(r.lon),
+  }))
+}

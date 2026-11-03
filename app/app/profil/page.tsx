@@ -12,8 +12,9 @@ import Ecran, { Carte } from '../_components/Ecran'
 import {
   ajusterPoids, arrondirPoids, normaliserPoids,
   CATEGORIES_CONTRAINTES, CONTRAINTES, LIBELLES_CRITERES, NIVEAUX_SOCIAUX,
-  ORDRE_CRITERES, POIDS_PAR_DEFAUT, TRANSPORTS,
-  enregistrerProfil, type ProfilComplet,
+  ORDRE_CRITERES, POIDS_PAR_DEFAUT, PREFERENCE_NEUTRE, TRANSPORTS,
+  enregistrerProfil, listerTypesActivite, rechercherAdresse,
+  type AdresseTrouvee, type ProfilComplet,
 } from '../_lib/profil'
 
 const RI_MIN = 0.5
@@ -345,18 +346,17 @@ export default function ProfilApp() {
               </div>
             </Bloc>
 
-            <Preferences profil={brouillon} />
+            <Adresse
+              zone={brouillon.zone}
+              lat={brouillon.home_lat}
+              lng={brouillon.home_lng}
+              onChange={(zone, home_lat, home_lng) => modifier({ zone, home_lat, home_lng })}
+            />
 
-            <Carte style={{ background: 'var(--app-surface-2)' }}>
-              <span style={{
-                fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
-                lineHeight: 1.6,
-              }}>
-                L&apos;adresse de départ et les préférences par type d&apos;activité se
-                modifient encore depuis le site. Elles arriveront ici avec le
-                questionnaire guidé.
-              </span>
-            </Carte>
+            <Preferences
+              prefs={brouillon.activity_prefs}
+              onChange={activity_prefs => modifier({ activity_prefs })}
+            />
           </div>
 
           {barreVisible && (
@@ -381,6 +381,14 @@ function cleDeComparaison(p: ProfilComplet) {
     budget: p.budget ?? null,
     social_level: p.social_level ?? null,
     weights: arrondirPoids(p.weights ?? POIDS_PAR_DEFAUT),
+    zone: p.zone ?? '',
+    home_lat: p.home_lat ?? null,
+    home_lng: p.home_lng ?? null,
+    // Trié par clé : l'ordre d'insertion d'un objet ne doit pas faire croire
+    // à une modification.
+    prefs: Object.entries(p.activity_prefs ?? {})
+      .map(([k, v]) => [k, Math.round(v)] as const)
+      .sort((a, b) => a[0].localeCompare(b[0])),
     // Les clés à false équivalent à une clé absente : on ne garde que les
     // contraintes actives, triées, sinon un simple aller-retour sur un bouton
     // ferait croire à une modification.
@@ -525,32 +533,209 @@ function BarreEnregistrement({
   )
 }
 
-function Preferences({ profil }: { profil: ProfilComplet }) {
-  const preferences = Object.entries(profil.activity_prefs ?? {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 6)
-
-  if (preferences.length === 0) return null
+/**
+ * Préférences par type d'activité.
+ *
+ * Le questionnaire guidé les estimera à terme, mais elles restent modifiables
+ * à la main : l'estimation est une proposition, pas une décision prise à la
+ * place de la personne.
+ */
+function Preferences({
+  prefs, onChange,
+}: {
+  prefs: Record<string, number> | null
+  onChange: (prefs: Record<string, number>) => void
+}) {
+  const types = listerTypesActivite(prefs)
 
   return (
-    <Bloc titre="Vos activités préférées">
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--app-space-2)' }}>
-        {preferences.map(([nom, valeur]) => (
-          <span key={nom} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            fontSize: 'var(--app-text-xs)', color: 'var(--app-text)',
-            background: 'var(--app-surface-2)',
-            border: '1px solid var(--app-border)',
-            padding: '5px 10px', borderRadius: 'var(--app-radius-full)',
-            minWidth: 0, overflowWrap: 'anywhere',
-          }}>
-            {nom}
-            <span style={{ color: 'var(--app-primary)', fontWeight: 700 }}>
-              {Math.round(valeur)} %
-            </span>
-          </span>
-        ))}
+    <Bloc titre="Vos goûts par type d'activité">
+      <p style={{
+        fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+        margin: '0 0 var(--app-space-4)', lineHeight: 1.5,
+      }}>
+        Ces valeurs seront estimées à partir de vos réponses au questionnaire,
+        puis affinées par vos choix réels. Vous pouvez les régler vous-même à
+        tout moment : votre réglage fait foi.
+      </p>
+
+      <div style={{ display: 'grid', gap: 'var(--app-space-4)' }}>
+        {types.map(type => {
+          const valeur = Math.round(prefs?.[type.cle] ?? PREFERENCE_NEUTRE)
+          return (
+            <div key={type.cle} style={{ minWidth: 0 }}>
+              <label htmlFor={`pref-${type.cle}`} style={{
+                display: 'flex', justifyContent: 'space-between',
+                gap: 'var(--app-space-2)', marginBottom: 2,
+              }}>
+                <span style={{
+                  fontSize: 'var(--app-text-sm)', color: 'var(--app-text)',
+                  minWidth: 0, overflowWrap: 'anywhere',
+                }}>
+                  {type.libelle}
+                  {type.personnalise && (
+                    <span style={{
+                      fontSize: 10, color: 'var(--app-text-dim)', marginLeft: 6,
+                    }}>
+                      sous-type
+                    </span>
+                  )}
+                </span>
+                <span style={{
+                  flexShrink: 0, fontSize: 'var(--app-text-sm)',
+                  fontWeight: 700, color: 'var(--app-primary)',
+                }}>
+                  {valeur} %
+                </span>
+              </label>
+              <input
+                id={`pref-${type.cle}`}
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={valeur}
+                onChange={e => onChange({
+                  ...(prefs ?? {}),
+                  [type.cle]: Number(e.target.value),
+                })}
+              />
+            </div>
+          )
+        })}
       </div>
+    </Bloc>
+  )
+}
+
+/**
+ * Adresse de départ. Le web utilise un composant d'autocomplétion habillé pour
+ * le thème clair ; on refait ici une recherche minimale sur le même service,
+ * plutôt que d'importer un composant qui jurerait avec le thème sombre.
+ */
+function Adresse({
+  zone, lat, lng, onChange,
+}: {
+  zone: string | null
+  lat: number | null
+  lng: number | null
+  onChange: (zone: string | null, lat: number | null, lng: number | null) => void
+}) {
+  const [requete, setRequete] = useState('')
+  const [resultats, setResultats] = useState<AdresseTrouvee[]>([])
+  const [recherche, setRecherche] = useState<'repos' | 'encours' | 'vide' | 'echec'>('repos')
+
+  const localisee = lat != null && lng != null
+
+  async function chercher() {
+    if (requete.trim().length < 3) return
+    setRecherche('encours')
+    try {
+      const trouves = await rechercherAdresse(requete)
+      setResultats(trouves)
+      setRecherche(trouves.length === 0 ? 'vide' : 'repos')
+    } catch {
+      setResultats([])
+      setRecherche('echec')
+    }
+  }
+
+  return (
+    <Bloc titre="Adresse de départ">
+      <p style={{
+        fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+        margin: '0 0 var(--app-space-3)', lineHeight: 1.5,
+      }}>
+        Point depuis lequel les distances sont calculées. Vous pourrez en
+        indiquer une autre ponctuellement, événement par événement.
+      </p>
+
+      <div style={{
+        padding: 'var(--app-space-3)',
+        borderRadius: 'var(--app-radius-sm)',
+        background: 'var(--app-surface-2)',
+        border: `1px solid ${localisee ? 'var(--app-success)' : 'var(--app-border)'}`,
+        marginBottom: 'var(--app-space-3)',
+      }}>
+        <span style={{
+          display: 'block', fontSize: 'var(--app-text-sm)',
+          color: zone ? 'var(--app-text)' : 'var(--app-text-dim)',
+          overflowWrap: 'anywhere', lineHeight: 1.5,
+        }}>
+          {zone || 'Aucune adresse enregistrée'}
+        </span>
+        <span style={{
+          display: 'block', marginTop: 4, fontSize: 10,
+          color: localisee ? 'var(--app-success)' : 'var(--app-warning)',
+        }}>
+          {localisee
+            ? 'Adresse géolocalisée — les distances partiront de ce point.'
+            : 'Non géolocalisée — aucune distance ne peut être calculée.'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 'var(--app-space-2)', flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          value={requete}
+          onChange={e => setRequete(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); chercher() } }}
+          placeholder="Rechercher une adresse"
+          style={{ ...champStyle, flex: 1, minWidth: 140, width: 'auto' }}
+        />
+        <button
+          type="button"
+          onClick={chercher}
+          disabled={recherche === 'encours' || requete.trim().length < 3}
+          style={{
+            flex: '0 0 auto', padding: '0 var(--app-space-4)',
+            borderRadius: 'var(--app-radius-sm)', border: 'none',
+            background: requete.trim().length < 3 ? 'var(--app-surface-2)' : 'var(--app-grad)',
+            color: requete.trim().length < 3 ? 'var(--app-text-dim)' : 'var(--app-on-primary)',
+            fontSize: 'var(--app-text-sm)', fontWeight: 700,
+            cursor: requete.trim().length < 3 ? 'default' : 'pointer',
+          }}
+        >
+          {recherche === 'encours' ? '…' : 'Chercher'}
+        </button>
+      </div>
+
+      {recherche === 'vide' && (
+        <p style={{ fontSize: 'var(--app-text-xs)', color: 'var(--app-text-muted)', margin: 'var(--app-space-3) 0 0' }}>
+          Aucune adresse trouvée. Essayez d&apos;être plus précis, avec la ville.
+        </p>
+      )}
+      {recherche === 'echec' && (
+        <p style={{ fontSize: 'var(--app-text-xs)', color: 'var(--app-danger)', margin: 'var(--app-space-3) 0 0' }}>
+          Recherche indisponible pour le moment.
+        </p>
+      )}
+
+      {resultats.length > 0 && (
+        <div style={{ display: 'grid', gap: 'var(--app-space-2)', marginTop: 'var(--app-space-3)' }}>
+          {resultats.map((r, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => {
+                onChange(r.libelle, r.lat, r.lng)
+                setResultats([])
+                setRequete('')
+              }}
+              style={{
+                textAlign: 'left', padding: 'var(--app-space-3)',
+                borderRadius: 'var(--app-radius-sm)',
+                border: '1px solid var(--app-border)',
+                background: 'transparent', color: 'var(--app-text-muted)',
+                fontSize: 'var(--app-text-sm)', cursor: 'pointer',
+                lineHeight: 1.5, overflowWrap: 'anywhere', minWidth: 0,
+              }}
+            >
+              {r.libelle}
+            </button>
+          ))}
+        </div>
+      )}
     </Bloc>
   )
 }
