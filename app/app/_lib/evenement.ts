@@ -99,6 +99,8 @@ export async function creerEvenement(params: {
   creneaux: Creneau[]
   description?: string
   lieu?: string
+  modeLieu?: 'zone' | 'hub'
+  emailsSupplementaires?: string[]
 }): Promise<string> {
   const reponse = await fetch('/api/events', {
     method: 'POST',
@@ -108,8 +110,8 @@ export async function creerEvenement(params: {
       description: params.description?.trim() || null,
       groupIds:    params.groupeIds,
       location:    params.lieu?.trim() || null,
-      locationMode: 'zone',
-      extraEmails: [],
+      locationMode: params.modeLieu ?? 'zone',
+      extraEmails: params.emailsSupplementaires ?? [],
       openInvite:  false,
       proposedDates: params.creneaux.map(c => ({
         label:     c.label,
@@ -124,6 +126,59 @@ export async function creerEvenement(params: {
   const donnees = await reponse.json().catch(() => ({}))
   if (!reponse.ok) {
     throw new Error(donnees.error ?? `Création impossible (${reponse.status}).`)
+  }
+  return donnees.id as string
+}
+
+/** Nombre maximal de dates proposées, comme sur le web. */
+export const MAX_CRENEAUX = 5
+
+/** Mode de localisation : zone de recherche ou point de rendez-vous fixe. */
+export const MODES_LIEU = [
+  {
+    valeur: 'zone' as const,
+    libelle: 'Zone de recherche',
+    aide: 'Le moteur cherche des activités dans cette zone.',
+    exemple: 'Ex : Paris centre, Lyon 2ème…',
+  },
+  {
+    valeur: 'hub' as const,
+    libelle: 'Lieu fixe',
+    aide: 'Point de rendez-vous autour duquel les activités sont proposées.',
+    exemple: 'Ex : Siège social, Domicile de Marie…',
+  },
+]
+
+export type ModeLieu = 'zone' | 'hub'
+
+/**
+ * Validation d'adresse électronique volontairement identique à celle du web :
+ * la seule présence d'un arobase. Un filtre plus strict rejetterait des
+ * adresses valides, et la vérification réelle se fait de toute façon à
+ * l'envoi du courriel.
+ */
+export function emailPlausible(valeur: string): boolean {
+  return valeur.includes('@') && valeur.trim().length > 2
+}
+
+/** Crée un groupe et renvoie son identifiant. */
+export async function creerGroupe(params: {
+  nom: string
+  description?: string
+  emails?: string[]
+}): Promise<string> {
+  const reponse = await fetch('/api/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      name: params.nom.trim(),
+      description: params.description?.trim() || null,
+      emails: params.emails ?? [],
+    }),
+  })
+  const donnees = await reponse.json().catch(() => ({}))
+  if (!reponse.ok) {
+    throw new Error(donnees.error ?? `Création du groupe impossible (${reponse.status}).`)
   }
   return donnees.id as string
 }

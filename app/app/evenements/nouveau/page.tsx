@@ -12,9 +12,10 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Carte } from '../../_components/Ecran'
 import {
-  HEURE_DEBUT_DEFAUT, HEURE_FIN_DEFAUT,
-  aujourdhui, creerEvenement, fenetreMinutes, formaterLibelleDate, listerGroupes,
-  type Creneau, type Groupe,
+  HEURE_DEBUT_DEFAUT, HEURE_FIN_DEFAUT, MAX_CRENEAUX, MODES_LIEU,
+  aujourdhui, creerEvenement, creerGroupe, emailPlausible,
+  fenetreMinutes, formaterLibelleDate, listerGroupes,
+  type Creneau, type Groupe, type ModeLieu,
 } from '../../_lib/evenement'
 
 type Etat =
@@ -33,9 +34,13 @@ export default function NouvelEvenementApp() {
   const [envoi, setEnvoi] = useState<Envoi>({ nom: 'repos' })
 
   const [nom, setNom] = useState('')
+  const [description, setDescription] = useState('')
   const [groupeIds, setGroupeIds] = useState<string[]>([])
   const [creneaux, setCreneaux] = useState<Creneau[]>([])
   const [dateSaisie, setDateSaisie] = useState('')
+  const [modeLieu, setModeLieu] = useState<ModeLieu>('zone')
+  const [lieu, setLieu] = useState('')
+  const [emails, setEmails] = useState<string[]>([])
 
   const charger = useCallback(async () => {
     try {
@@ -56,7 +61,7 @@ export default function NouvelEvenementApp() {
   useEffect(() => { charger() }, [charger])
 
   function ajouterDate() {
-    if (!dateSaisie) return
+    if (!dateSaisie || creneaux.length >= MAX_CRENEAUX) return
     if (creneaux.some(c => c.date === dateSaisie)) { setDateSaisie(''); return }
     setCreneaux(c => [...c, {
       date: dateSaisie,
@@ -77,7 +82,10 @@ export default function NouvelEvenementApp() {
     if (!valide) return
     setEnvoi({ nom: 'encours' })
     try {
-      const id = await creerEvenement({ nom, groupeIds, creneaux })
+      const id = await creerEvenement({
+        nom, groupeIds, creneaux, description,
+        lieu, modeLieu, emailsSupplementaires: emails,
+      })
       router.push(`/app/evenements/${id}`)
     } catch (e) {
       setEnvoi({
@@ -140,9 +148,14 @@ export default function NouvelEvenementApp() {
           }}>
             Un événement appartient toujours à un groupe — c&apos;est ce qui permet
             de suivre l&apos;historique et de calculer l&apos;équité entre participants.
-            Créez d&apos;abord un groupe depuis le site, puis partagez son lien
-            d&apos;invitation.
+            Créez-en un pour commencer.
           </p>
+          <CreationGroupe
+            onCree={groupe => {
+              setEtat({ nom: 'pret', groupes: [groupe] })
+              setGroupeIds([groupe.id])
+            }}
+          />
         </Carte>
       )}
 
@@ -156,6 +169,22 @@ export default function NouvelEvenementApp() {
               onChange={e => { setEnvoi({ nom: 'repos' }); setNom(e.target.value) }}
               placeholder="Week-end entre amis"
               style={champStyle}
+            />
+
+            <label htmlFor="description" style={{
+              display: 'block', marginTop: 'var(--app-space-4)',
+              fontSize: 'var(--app-text-sm)', color: 'var(--app-text-muted)',
+              marginBottom: 6,
+            }}>
+              Description, facultative
+            </label>
+            <textarea
+              id="description"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              rows={3}
+              placeholder="Ce que vous avez en tête, le contexte, ce qu'il faut prévoir…"
+              style={{ ...champStyle, resize: 'vertical', lineHeight: 1.5 }}
             />
           </Bloc>
 
@@ -201,6 +230,13 @@ export default function NouvelEvenementApp() {
                 Les membres de tous les groupes choisis seront conviés.
               </p>
             )}
+
+            <CreationGroupe
+              onCree={groupe => {
+                setEtat(e => e.nom === 'pret' ? { ...e, groupes: [groupe, ...e.groupes] } : e)
+                setGroupeIds(ids => [...ids, groupe.id])
+              }}
+            />
           </Bloc>
 
           <Bloc titre="Dates proposées">
@@ -215,19 +251,28 @@ export default function NouvelEvenementApp() {
               <button
                 type="button"
                 onClick={ajouterDate}
-                disabled={!dateSaisie}
+                disabled={!dateSaisie || creneaux.length >= MAX_CRENEAUX}
                 style={{
                   flex: '0 0 auto', padding: '0 var(--app-space-4)',
                   borderRadius: 'var(--app-radius-sm)', border: 'none',
-                  background: dateSaisie ? 'var(--app-grad)' : 'var(--app-surface-2)',
-                  color: dateSaisie ? 'var(--app-on-primary)' : 'var(--app-text-dim)',
+                  background: dateSaisie && creneaux.length < MAX_CRENEAUX ? 'var(--app-grad)' : 'var(--app-surface-2)',
+                  color: dateSaisie && creneaux.length < MAX_CRENEAUX ? 'var(--app-on-primary)' : 'var(--app-text-dim)',
                   fontSize: 'var(--app-text-sm)', fontWeight: 700,
-                  cursor: dateSaisie ? 'pointer' : 'default',
+                  cursor: dateSaisie && creneaux.length < MAX_CRENEAUX ? 'pointer' : 'default',
                 }}
               >
                 Ajouter
               </button>
             </div>
+
+            {creneaux.length >= MAX_CRENEAUX && (
+              <p style={{
+                fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+                margin: 'var(--app-space-2) 0 0',
+              }}>
+                Maximum atteint : {MAX_CRENEAUX} dates.
+              </p>
+            )}
 
             {creneaux.length === 0 ? (
               <p style={{
@@ -251,12 +296,55 @@ export default function NouvelEvenementApp() {
             )}
           </Bloc>
 
+          <Bloc titre="Localisation, facultative">
+            <div style={{ display: 'flex', gap: 'var(--app-space-2)', marginBottom: 'var(--app-space-3)' }}>
+              {MODES_LIEU.map(mode => {
+                const actif = modeLieu === mode.valeur
+                return (
+                  <button
+                    key={mode.valeur}
+                    type="button"
+                    aria-pressed={actif}
+                    onClick={() => setModeLieu(mode.valeur)}
+                    style={{
+                      flex: 1, minWidth: 0, padding: 'var(--app-space-2)',
+                      borderRadius: 'var(--app-radius-sm)',
+                      border: `1.5px solid ${actif ? 'var(--app-primary)' : 'var(--app-border)'}`,
+                      background: actif ? 'rgba(139, 92, 246, 0.16)' : 'transparent',
+                      color: actif ? 'var(--app-text)' : 'var(--app-text-muted)',
+                      fontSize: 'var(--app-text-sm)', fontWeight: actif ? 700 : 600,
+                      cursor: 'pointer', overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {mode.libelle}
+                  </button>
+                )
+              })}
+            </div>
+
+            <p style={{
+              fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+              margin: '0 0 var(--app-space-3)', lineHeight: 1.5,
+            }}>
+              {MODES_LIEU.find(m => m.valeur === modeLieu)?.aide}
+            </p>
+
+            <input
+              type="text"
+              value={lieu}
+              onChange={e => setLieu(e.target.value)}
+              placeholder={MODES_LIEU.find(m => m.valeur === modeLieu)?.exemple}
+              style={champStyle}
+            />
+          </Bloc>
+
+          <Participants emails={emails} onChange={setEmails} />
+
           <Carte style={{ background: 'var(--app-surface-2)' }}>
             <span style={{
               fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)', lineHeight: 1.6,
             }}>
-              Budget, quorum, lieu et invitations par courriel se règlent ensuite
-              depuis la page de l&apos;événement.
+              Budget et quorum se règlent ensuite depuis la page de l&apos;événement.
             </span>
           </Carte>
         </div>
@@ -363,6 +451,208 @@ function LigneCreneau({
         </p>
       )}
     </div>
+  )
+}
+
+/**
+ * Création d'un groupe sans quitter l'écran. Un événement exige un groupe, et
+ * sortir de l'application pour en créer un sur le site ferait perdre toute la
+ * saisie en cours.
+ */
+function CreationGroupe({ onCree }: { onCree: (groupe: Groupe) => void }) {
+  const [ouvert, setOuvert] = useState(false)
+  const [nom, setNom] = useState('')
+  const [etat, setEtat] = useState<'repos' | 'encours' | string>('repos')
+
+  async function creer() {
+    if (!nom.trim()) return
+    setEtat('encours')
+    try {
+      const id = await creerGroupe({ nom })
+      onCree({ id, name: nom.trim(), description: null, owner: true })
+      setNom('')
+      setOuvert(false)
+      setEtat('repos')
+    } catch (e) {
+      setEtat(e instanceof Error && e.message ? e.message : 'Création impossible.')
+    }
+  }
+
+  if (!ouvert) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOuvert(true)}
+        style={{
+          width: '100%', marginTop: 'var(--app-space-3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+          borderRadius: 'var(--app-radius-sm)',
+          border: '1.5px dashed var(--app-border-strong)',
+          background: 'transparent', color: 'var(--app-text-muted)',
+          fontSize: 'var(--app-text-sm)', fontWeight: 600, cursor: 'pointer',
+        }}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Créer un groupe
+      </button>
+    )
+  }
+
+  return (
+    <div style={{
+      marginTop: 'var(--app-space-3)', padding: 'var(--app-space-3)',
+      borderRadius: 'var(--app-radius-sm)',
+      border: '1px solid var(--app-border-strong)',
+      background: 'var(--app-surface-2)',
+    }}>
+      <input
+        type="text"
+        value={nom}
+        onChange={e => { setNom(e.target.value); setEtat('repos') }}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); creer() } }}
+        placeholder="Nom du groupe"
+        autoFocus
+        style={champStyle}
+      />
+      <p style={{
+        fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+        margin: 'var(--app-space-2) 0 var(--app-space-3)', lineHeight: 1.5,
+      }}>
+        Vous pourrez ensuite inviter ses membres par lien, depuis la page du
+        groupe. C&apos;est le moyen le plus simple : pas de courriel à saisir, et
+        rien qui risque d&apos;atterrir en indésirable.
+      </p>
+
+      {typeof etat === 'string' && etat !== 'repos' && etat !== 'encours' && (
+        <p style={{
+          fontSize: 'var(--app-text-xs)', color: 'var(--app-danger)',
+          margin: '0 0 var(--app-space-2)', overflowWrap: 'anywhere',
+        }}>
+          {etat}
+        </p>
+      )}
+
+      <div style={{ display: 'flex', gap: 'var(--app-space-2)' }}>
+        <button
+          type="button"
+          onClick={() => { setOuvert(false); setNom(''); setEtat('repos') }}
+          style={{
+            flex: '0 0 auto', padding: '0 var(--app-space-4)',
+            borderRadius: 'var(--app-radius-sm)',
+            border: '1.5px solid var(--app-border-strong)',
+            background: 'transparent', color: 'var(--app-text-muted)',
+            fontSize: 'var(--app-text-sm)', fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          Annuler
+        </button>
+        <button
+          type="button"
+          onClick={creer}
+          disabled={!nom.trim() || etat === 'encours'}
+          style={boutonPrincipal(Boolean(nom.trim()) && etat !== 'encours')}
+        >
+          {etat === 'encours' ? 'Création…' : 'Créer'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Participants hors groupe, invités par courriel.
+ *
+ * Volontairement présentés comme un recours : ce sont eux qui alimentent les
+ * « extras » à rattacher ensuite, et le lien d'invitation du groupe évite ce
+ * détour comme les aléas de délivrabilité.
+ */
+function Participants({
+  emails, onChange,
+}: {
+  emails: string[]
+  onChange: (emails: string[]) => void
+}) {
+  const [saisie, setSaisie] = useState('')
+
+  function ajouter() {
+    const valeur = saisie.trim().toLowerCase()
+    if (!emailPlausible(valeur) || emails.includes(valeur)) { setSaisie(''); return }
+    onChange([...emails, valeur])
+    setSaisie('')
+  }
+
+  return (
+    <Bloc titre="Inviter hors groupe, facultatif">
+      <p style={{
+        fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+        margin: '0 0 var(--app-space-3)', lineHeight: 1.5,
+      }}>
+        Pour convier quelqu&apos;un qui n&apos;est dans aucun de vos groupes. Préférez
+        le lien d&apos;invitation du groupe quand c&apos;est possible : il évite les
+        courriels perdus en indésirables, et ces personnes devront de toute
+        façon être rattachées à un groupe à la clôture.
+      </p>
+
+      <div style={{ display: 'flex', gap: 'var(--app-space-2)', flexWrap: 'wrap' }}>
+        <input
+          type="email"
+          inputMode="email"
+          value={saisie}
+          onChange={e => setSaisie(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ajouter() } }}
+          placeholder="prenom@exemple.fr"
+          style={{ ...champStyle, flex: 1, minWidth: 150, width: 'auto' }}
+        />
+        <button
+          type="button"
+          onClick={ajouter}
+          disabled={!emailPlausible(saisie.trim())}
+          style={{
+            flex: '0 0 auto', padding: '0 var(--app-space-4)',
+            borderRadius: 'var(--app-radius-sm)', border: 'none',
+            background: emailPlausible(saisie.trim()) ? 'var(--app-grad)' : 'var(--app-surface-2)',
+            color: emailPlausible(saisie.trim()) ? 'var(--app-on-primary)' : 'var(--app-text-dim)',
+            fontSize: 'var(--app-text-sm)', fontWeight: 700,
+            cursor: emailPlausible(saisie.trim()) ? 'pointer' : 'default',
+          }}
+        >
+          Ajouter
+        </button>
+      </div>
+
+      {emails.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--app-space-2)', marginTop: 'var(--app-space-3)' }}>
+          {emails.map(email => (
+            <span key={email} style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: 'var(--app-text-xs)', color: 'var(--app-text)',
+              background: 'var(--app-surface-2)',
+              border: '1px solid var(--app-border)',
+              padding: '4px 4px 4px 10px', borderRadius: 'var(--app-radius-full)',
+              minWidth: 0, overflowWrap: 'anywhere',
+            }}>
+              {email}
+              <button
+                type="button"
+                onClick={() => onChange(emails.filter(e => e !== email))}
+                aria-label={`Retirer ${email}`}
+                style={{
+                  flexShrink: 0, minHeight: 22, width: 22, padding: 0,
+                  borderRadius: 'var(--app-radius-full)', border: 'none',
+                  background: 'var(--app-border)', color: 'var(--app-text-muted)',
+                  fontSize: 13, lineHeight: 1, cursor: 'pointer',
+                }}
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </Bloc>
   )
 }
 
