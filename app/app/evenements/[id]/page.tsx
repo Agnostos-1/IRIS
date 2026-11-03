@@ -280,6 +280,22 @@ function Contenu({
           </Link>
         )}
 
+        {!evenement.cancelledAt && (
+          <Link
+            href={`/app/evenements/${evenement.id}/activites`}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              minHeight: 48, borderRadius: 'var(--app-radius)',
+              border: '1.5px solid var(--app-border-strong)',
+              background: 'transparent', color: 'var(--app-text)',
+              fontSize: 'var(--app-text-sm)', fontWeight: 700,
+              textDecoration: 'none', WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            Voir les activités proposées
+          </Link>
+        )}
+
         {evenement.proposedDates.length > 0 && (
           <Bloc titre="Dates proposées">
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--app-space-2)' }}>
