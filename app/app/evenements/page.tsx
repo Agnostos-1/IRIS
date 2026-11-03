@@ -7,6 +7,7 @@
 
 'use client'
 
+import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import Ecran, { Carte } from '../_components/Ecran'
 import { DERNIERE_PHASE, phaseDe } from '../_lib/phases'
@@ -118,6 +119,15 @@ function CarteEvenement({ evenement }: { evenement: Evenement }) {
   const contexte = [evenement.groupName, evenement.dateLabel].filter(Boolean).join(' · ')
 
   return (
+    <Link
+      href={`/app/evenements/${evenement.id}`}
+      style={{
+        display: 'block', textDecoration: 'none', color: 'inherit',
+        borderRadius: 'var(--app-radius)',
+        // Supprime le surlignage bleu au toucher sur Android.
+        WebkitTapHighlightColor: 'transparent',
+      }}
+    >
     <Carte style={{ padding: 'var(--app-space-4)' }}>
       <div style={{
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
@@ -176,6 +186,7 @@ function CarteEvenement({ evenement }: { evenement: Evenement }) {
         </span>
       </div>
     </Carte>
+    </Link>
   )
 }
 
