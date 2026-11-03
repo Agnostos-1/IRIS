@@ -12,6 +12,7 @@ import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Carte } from '../../_components/Ecran'
 import Invitation from '../../_components/Invitation'
+import ReglagesOrganisateur from '../../_components/ReglagesOrganisateur'
 import { DERNIERE_PHASE, phaseDe } from '../../_lib/phases'
 
 type DateProposee = string | { date?: string; label?: string }
@@ -27,6 +28,12 @@ type Evenement = {
   groupNames: string[]
   cancelledAt: string | null
   inviteCode: string | null
+  createdBy: string
+  openInvite: boolean
+  autoReminder: boolean
+  revealAfterSubmit: boolean
+  budgetGlobal: number | null
+  budgetOverrunPct: number
 }
 
 type Disponibilite = {
@@ -122,6 +129,7 @@ export default function DetailEvenementApp() {
           evenement={etat.evenement}
           disponibilites={etat.disponibilites}
           budgetMedian={etat.budgetMedian}
+          onEvenementChange={evenement => setEtat(e => e.nom === 'pret' ? { ...e, evenement } : e)}
         />
       )}
     </div>
@@ -129,11 +137,12 @@ export default function DetailEvenementApp() {
 }
 
 function Contenu({
-  evenement, disponibilites, budgetMedian,
+  evenement, disponibilites, budgetMedian, onEvenementChange,
 }: {
   evenement: Evenement
   disponibilites: Disponibilite[]
   budgetMedian: number | null
+  onEvenementChange: (evenement: Evenement) => void
 }) {
   const phase  = phaseDe(evenement.phase)
   const etape  = Math.min(Math.max(evenement.phase, 0), DERNIERE_PHASE)
@@ -141,8 +150,13 @@ function Contenu({
 
   // La route ne renvoie l'adresse électronique que pour la ligne de
   // l'utilisateur courant : c'est ce qui permet de reconnaître sa propre
-  // réponse sans qu'aucun identifiant ne transite.
-  const jAiRepondu = disponibilites.some(d => d.email !== undefined && d.submitted)
+  // ligne sans qu'aucun identifiant ne transite.
+  const maLigne = disponibilites.find(d => d.email !== undefined)
+  const jAiRepondu = maLigne?.submitted === true
+  const jeSuisOrganisateur = maLigne?.userId === evenement.createdBy
+
+  // Par défaut, seul l'organisateur invite. Il peut ouvrir ce droit à tous.
+  const jePeuxInviter = jeSuisOrganisateur || evenement.openInvite
 
   return (
     <>
@@ -249,10 +263,6 @@ function Contenu({
           </div>
         </Bloc>
 
-        {evenement.inviteCode && !evenement.cancelledAt && (
-          <Invitation code={evenement.inviteCode} nomEvenement={evenement.name} />
-        )}
-
         {evenement.proposedDates.length > 0 && !evenement.cancelledAt && (
           <Link
             href={`/app/evenements/${evenement.id}/disponibilites`}
@@ -304,6 +314,30 @@ function Contenu({
               )}
             </div>
           </Bloc>
+        )}
+
+        {/* Inviter et régler viennent en fin de page : un participant vient
+            d'abord voir où en est l'événement et répondre. */}
+        {evenement.inviteCode && !evenement.cancelledAt && jePeuxInviter && (
+          <Invitation code={evenement.inviteCode} nomEvenement={evenement.name} />
+        )}
+
+        {jeSuisOrganisateur && !evenement.cancelledAt && (
+          <ReglagesOrganisateur
+            evenementId={evenement.id}
+            phase={evenement.phase}
+            initiaux={{
+              description:       evenement.description,
+              deadline:          evenement.deadline,
+              autoReminder:      evenement.autoReminder,
+              revealAfterSubmit: evenement.revealAfterSubmit,
+              openInvite:        evenement.openInvite,
+              budgetGlobal:      evenement.budgetGlobal,
+              budgetOverrunPct:  evenement.budgetOverrunPct,
+            }}
+            onEnregistre={reglages => onEvenementChange({ ...evenement, ...reglages })}
+            onAnnule={() => onEvenementChange({ ...evenement, cancelledAt: new Date().toISOString() })}
+          />
         )}
       </div>
     </>

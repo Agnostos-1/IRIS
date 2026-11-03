@@ -13,7 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Carte } from '../../_components/Ecran'
 import {
   HEURE_DEBUT_DEFAUT, HEURE_FIN_DEFAUT, MAX_CRENEAUX, MODES_LIEU,
-  aujourdhui, creerEvenement, creerGroupe, emailPlausible,
+  aujourdhui, creerEvenement, creerGroupe,
   fenetreMinutes, formaterLibelleDate, listerGroupes,
   type Creneau, type Groupe, type ModeLieu,
 } from '../../_lib/evenement'
@@ -40,7 +40,6 @@ export default function NouvelEvenementApp() {
   const [dateSaisie, setDateSaisie] = useState('')
   const [modeLieu, setModeLieu] = useState<ModeLieu>('zone')
   const [lieu, setLieu] = useState('')
-  const [emails, setEmails] = useState<string[]>([])
 
   const charger = useCallback(async () => {
     try {
@@ -84,7 +83,7 @@ export default function NouvelEvenementApp() {
     try {
       const id = await creerEvenement({
         nom, groupeIds, creneaux, description,
-        lieu, modeLieu, emailsSupplementaires: emails,
+        lieu, modeLieu,
       })
       router.push(`/app/evenements/${id}`)
     } catch (e) {
@@ -338,13 +337,13 @@ export default function NouvelEvenementApp() {
             />
           </Bloc>
 
-          <Participants emails={emails} onChange={setEmails} />
-
           <Carte style={{ background: 'var(--app-surface-2)' }}>
             <span style={{
               fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)', lineHeight: 1.6,
             }}>
-              Budget et quorum se règlent ensuite depuis la page de l&apos;événement.
+              Une fois l&apos;événement créé, vous pourrez inviter par lien, par
+              QR code ou par partage — et régler budget, échéance et relance
+              depuis sa page.
             </span>
           </Carte>
         </div>
@@ -559,100 +558,6 @@ function CreationGroupe({ onCree }: { onCree: (groupe: Groupe) => void }) {
         </button>
       </div>
     </div>
-  )
-}
-
-/**
- * Participants hors groupe, invités par courriel.
- *
- * Volontairement présentés comme un recours : ce sont eux qui alimentent les
- * « extras » à rattacher ensuite, et le lien d'invitation du groupe évite ce
- * détour comme les aléas de délivrabilité.
- */
-function Participants({
-  emails, onChange,
-}: {
-  emails: string[]
-  onChange: (emails: string[]) => void
-}) {
-  const [saisie, setSaisie] = useState('')
-
-  function ajouter() {
-    const valeur = saisie.trim().toLowerCase()
-    if (!emailPlausible(valeur) || emails.includes(valeur)) { setSaisie(''); return }
-    onChange([...emails, valeur])
-    setSaisie('')
-  }
-
-  return (
-    <Bloc titre="Inviter hors groupe, facultatif">
-      <p style={{
-        fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
-        margin: '0 0 var(--app-space-3)', lineHeight: 1.5,
-      }}>
-        Pour convier quelqu&apos;un qui n&apos;est dans aucun de vos groupes. Préférez
-        le lien d&apos;invitation du groupe quand c&apos;est possible : il évite les
-        courriels perdus en indésirables, et ces personnes devront de toute
-        façon être rattachées à un groupe à la clôture.
-      </p>
-
-      <div style={{ display: 'flex', gap: 'var(--app-space-2)', flexWrap: 'wrap' }}>
-        <input
-          type="email"
-          inputMode="email"
-          value={saisie}
-          onChange={e => setSaisie(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); ajouter() } }}
-          placeholder="prenom@exemple.fr"
-          style={{ ...champStyle, flex: 1, minWidth: 150, width: 'auto' }}
-        />
-        <button
-          type="button"
-          onClick={ajouter}
-          disabled={!emailPlausible(saisie.trim())}
-          style={{
-            flex: '0 0 auto', padding: '0 var(--app-space-4)',
-            borderRadius: 'var(--app-radius-sm)', border: 'none',
-            background: emailPlausible(saisie.trim()) ? 'var(--app-grad)' : 'var(--app-surface-2)',
-            color: emailPlausible(saisie.trim()) ? 'var(--app-on-primary)' : 'var(--app-text-dim)',
-            fontSize: 'var(--app-text-sm)', fontWeight: 700,
-            cursor: emailPlausible(saisie.trim()) ? 'pointer' : 'default',
-          }}
-        >
-          Ajouter
-        </button>
-      </div>
-
-      {emails.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--app-space-2)', marginTop: 'var(--app-space-3)' }}>
-          {emails.map(email => (
-            <span key={email} style={{
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              fontSize: 'var(--app-text-xs)', color: 'var(--app-text)',
-              background: 'var(--app-surface-2)',
-              border: '1px solid var(--app-border)',
-              padding: '4px 4px 4px 10px', borderRadius: 'var(--app-radius-full)',
-              minWidth: 0, overflowWrap: 'anywhere',
-            }}>
-              {email}
-              <button
-                type="button"
-                onClick={() => onChange(emails.filter(e => e !== email))}
-                aria-label={`Retirer ${email}`}
-                style={{
-                  flexShrink: 0, minHeight: 22, width: 22, padding: 0,
-                  borderRadius: 'var(--app-radius-full)', border: 'none',
-                  background: 'var(--app-border)', color: 'var(--app-text-muted)',
-                  fontSize: 13, lineHeight: 1, cursor: 'pointer',
-                }}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-    </Bloc>
   )
 }
 
