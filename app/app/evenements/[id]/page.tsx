@@ -11,6 +11,7 @@ import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
 import { Carte } from '../../_components/Ecran'
+import Invitation from '../../_components/Invitation'
 import { DERNIERE_PHASE, phaseDe } from '../../_lib/phases'
 
 type DateProposee = string | { date?: string; label?: string }
@@ -25,6 +26,7 @@ type Evenement = {
   deadline: string | null
   groupNames: string[]
   cancelledAt: string | null
+  inviteCode: string | null
 }
 
 type Disponibilite = {
@@ -240,6 +242,10 @@ function Contenu({
             )}
           </div>
         </Bloc>
+
+        {evenement.inviteCode && !evenement.cancelledAt && (
+          <Invitation code={evenement.inviteCode} nomEvenement={evenement.name} />
+        )}
 
         {evenement.proposedDates.length > 0 && (
           <Bloc titre="Dates proposées">
