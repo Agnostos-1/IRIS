@@ -10,18 +10,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import Ecran, { Carte } from '../_components/Ecran'
 import {
-  LIBELLES_CRITERES, ORDRE_CRITERES, POIDS_PAR_DEFAUT,
-  enregistrerProfil, normaliserPoids, type ProfilComplet,
+  ajusterPoids, arrondirPoids, normaliserPoids,
+  CATEGORIES_CONTRAINTES, CONTRAINTES, LIBELLES_CRITERES, NIVEAUX_SOCIAUX,
+  ORDRE_CRITERES, POIDS_PAR_DEFAUT, TRANSPORTS,
+  enregistrerProfil, type ProfilComplet,
 } from '../_lib/profil'
 
-// Bornes du coefficient d'équité appliquées par le moteur.
 const RI_MIN = 0.5
 const RI_MAX = 1.2
 
 type Etat =
   | { nom: 'chargement' }
   | { nom: 'erreur'; message: string }
-  | { nom: 'pret'; profil: ProfilComplet }
+  | { nom: 'pret' }
 
 type Enregistrement =
   | { nom: 'repos' }
@@ -31,8 +32,12 @@ type Enregistrement =
 
 export default function ProfilApp() {
   const [etat, setEtat] = useState<Etat>({ nom: 'chargement' })
-  const [poids, setPoids] = useState<Record<string, number>>(POIDS_PAR_DEFAUT)
-  const [enregistrement, setEnregistrement] = useState<Enregistrement>({ nom: 'repos' })
+  // « enregistré » est l'état serveur, « brouillon » ce que l'utilisateur
+  // manipule. Comparer les deux donne la détection de modification sans avoir
+  // à suivre chaque champ séparément.
+  const [enregistre, setEnregistre] = useState<ProfilComplet | null>(null)
+  const [brouillon, setBrouillon] = useState<ProfilComplet | null>(null)
+  const [sauvegarde, setSauvegarde] = useState<Enregistrement>({ nom: 'repos' })
 
   const charger = useCallback(async () => {
     try {
@@ -44,9 +49,17 @@ export default function ProfilApp() {
           : `Le serveur a répondu ${reponse.status}.`
         )
       }
-      const profil: ProfilComplet = await reponse.json()
-      setEtat({ nom: 'pret', profil })
-      setPoids({ ...POIDS_PAR_DEFAUT, ...(profil.weights ?? {}) })
+      const recu: ProfilComplet = await reponse.json()
+      // Les poids en base peuvent suivre une ancienne échelle : on les ramène
+      // à 100 dès le chargement, pour que les curseurs portent le pourcentage.
+      const normalise: ProfilComplet = {
+        ...recu,
+        weights: arrondirPoids(normaliserPoids({ ...POIDS_PAR_DEFAUT, ...(recu.weights ?? {}) })),
+        hard_constraints: recu.hard_constraints ?? {},
+      }
+      setEnregistre(normalise)
+      setBrouillon(normalise)
+      setEtat({ nom: 'pret' })
     } catch (e) {
       setEtat({
         nom: 'erreur',
@@ -59,36 +72,44 @@ export default function ProfilApp() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { charger() }, [charger])
 
-  const profil = etat.nom === 'pret' ? etat.profil : null
+  const modifie =
+    enregistre !== null && brouillon !== null &&
+    JSON.stringify(cleDeComparaison(brouillon)) !== JSON.stringify(cleDeComparaison(enregistre))
 
-  // Comparaison sur les valeurs normalisées : ce sont elles qui sont
-  // enregistrées, donc deux réglages bruts différents mais équivalents une
-  // fois normalisés ne doivent pas faire croire à une modification.
-  const poidsNormalises = normaliserPoids(poids)
-  const modifie = profil !== null &&
-    JSON.stringify(poidsNormalises) !== JSON.stringify(normaliserPoids({ ...POIDS_PAR_DEFAUT, ...(profil.weights ?? {}) }))
+  function modifier(champs: Partial<ProfilComplet>) {
+    setSauvegarde({ nom: 'repos' })
+    setBrouillon(b => (b ? { ...b, ...champs } : b))
+  }
 
   async function enregistrer() {
-    if (!profil) return
-    setEnregistrement({ nom: 'encours' })
+    if (!brouillon) return
+    setSauvegarde({ nom: 'encours' })
     try {
-      await enregistrerProfil(profil, { weights: poidsNormalises })
-      setEtat({ nom: 'pret', profil: { ...profil, weights: poidsNormalises } })
-      setPoids(poidsNormalises)
-      setEnregistrement({ nom: 'fait' })
-      setTimeout(() => setEnregistrement({ nom: 'repos' }), 2200)
+      // Les poids partent arrondis : c'est ce qui est affiché, donc ce qui
+      // doit être stocké, sans écart entre l'écran et la base.
+      const aEnvoyer: ProfilComplet = {
+        ...brouillon,
+        weights: arrondirPoids(brouillon.weights ?? POIDS_PAR_DEFAUT),
+      }
+      await enregistrerProfil(aEnvoyer)
+      setEnregistre(aEnvoyer)
+      setBrouillon(aEnvoyer)
+      setSauvegarde({ nom: 'fait' })
+      setTimeout(() => setSauvegarde({ nom: 'repos' }), 2200)
     } catch (e) {
-      setEnregistrement({
+      setSauvegarde({
         nom: 'echec',
         message: e instanceof Error && e.message ? e.message : 'Enregistrement impossible.',
       })
     }
   }
 
+  const barreVisible = modifie || sauvegarde.nom !== 'repos'
+
   return (
     <Ecran
       titre="Profil"
-      sousTitre={profil?.display_name ?? 'Vos préférences et vos contraintes'}
+      sousTitre={enregistre?.display_name ?? 'Vos préférences et vos contraintes'}
     >
       {etat.nom === 'chargement' && (
         <Carte>
@@ -115,90 +136,314 @@ export default function ProfilApp() {
         </Carte>
       )}
 
-      {profil && (
+      {brouillon && (
         <>
           <div style={{
             display: 'grid', gap: 'var(--app-space-3)',
-            // Place pour la barre d'enregistrement, qui flotte au-dessus des onglets.
-            paddingBottom: modifie || enregistrement.nom !== 'repos' ? 78 : 0,
+            paddingBottom: barreVisible ? 80 : 0,
           }}>
-            {profil.fairness && <Equite fairness={profil.fairness} />}
+            {brouillon.fairness && <Equite fairness={brouillon.fairness} />}
+
+            <Bloc titre="Identité">
+              <label htmlFor="nom" style={{
+                display: 'block', fontSize: 'var(--app-text-sm)',
+                color: 'var(--app-text-muted)', marginBottom: 6,
+              }}>
+                Prénom ou pseudo affiché
+              </label>
+              <input
+                id="nom"
+                type="text"
+                value={brouillon.display_name ?? ''}
+                onChange={e => modifier({ display_name: e.target.value })}
+                placeholder="Visible par les autres participants"
+                style={champStyle}
+              />
+            </Bloc>
 
             <Bloc titre="Importance des critères">
               <p style={{
                 fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
                 margin: '0 0 var(--app-space-4)', lineHeight: 1.5,
               }}>
-                Ces valeurs sont relatives : augmenter un critère diminue le poids
-                des autres.
+                Le total fait toujours 100 % : augmenter un critère répartit la
+                différence sur les autres.
               </p>
 
               <div style={{ display: 'grid', gap: 'var(--app-space-5)' }}>
-                {ORDRE_CRITERES.map(cle => (
-                  <div key={cle} style={{ minWidth: 0 }}>
-                    <label
-                      htmlFor={`poids-${cle}`}
-                      style={{
+                {ORDRE_CRITERES.map(cle => {
+                  const affiche = arrondirPoids(brouillon.weights ?? POIDS_PAR_DEFAUT)
+                  return (
+                    <div key={cle} style={{ minWidth: 0 }}>
+                      <label htmlFor={`poids-${cle}`} style={{
                         display: 'flex', justifyContent: 'space-between',
                         gap: 'var(--app-space-2)', marginBottom: 2,
-                      }}
-                    >
-                      <span style={{
-                        fontSize: 'var(--app-text-sm)', color: 'var(--app-text)',
-                        minWidth: 0, overflowWrap: 'anywhere',
                       }}>
-                        {LIBELLES_CRITERES[cle] ?? cle}
-                      </span>
-                      <span style={{
-                        flexShrink: 0, fontSize: 'var(--app-text-sm)',
-                        fontWeight: 700, color: 'var(--app-primary)',
-                      }}>
-                        {poidsNormalises[cle] ?? 0} %
-                      </span>
-                    </label>
-                    <input
-                      id={`poids-${cle}`}
-                      type="range"
-                      min={0}
-                      max={100}
-                      step={1}
-                      value={poids[cle] ?? 0}
-                      onChange={e => {
-                        setEnregistrement({ nom: 'repos' })
-                        setPoids(p => ({ ...p, [cle]: Number(e.target.value) }))
-                      }}
-                    />
+                        <span style={{
+                          fontSize: 'var(--app-text-sm)', color: 'var(--app-text)',
+                          minWidth: 0, overflowWrap: 'anywhere',
+                        }}>
+                          {LIBELLES_CRITERES[cle] ?? cle}
+                        </span>
+                        <span style={{
+                          flexShrink: 0, fontSize: 'var(--app-text-sm)',
+                          fontWeight: 700, color: 'var(--app-primary)',
+                        }}>
+                          {affiche[cle]} %
+                        </span>
+                      </label>
+                      <input
+                        id={`poids-${cle}`}
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={affiche[cle]}
+                        onChange={e => modifier({
+                          weights: ajusterPoids(
+                            brouillon.weights ?? POIDS_PAR_DEFAUT,
+                            cle,
+                            Number(e.target.value),
+                          ),
+                        })}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+            </Bloc>
+
+            <Bloc titre="Déplacement">
+              <Choix
+                options={TRANSPORTS.map(t => ({ valeur: t.valeur, libelle: t.libelle, detail: t.detail }))}
+                valeur={brouillon.transport ?? 'transit'}
+                onChange={v => modifier({ transport: String(v) })}
+              />
+
+              <div style={{ marginTop: 'var(--app-space-5)' }}>
+                <label htmlFor="distance" style={{
+                  display: 'flex', justifyContent: 'space-between',
+                  gap: 'var(--app-space-2)', marginBottom: 2,
+                }}>
+                  <span style={{ fontSize: 'var(--app-text-sm)', color: 'var(--app-text)' }}>
+                    Distance maximale confortable
+                  </span>
+                  <span style={{
+                    flexShrink: 0, fontSize: 'var(--app-text-sm)',
+                    fontWeight: 700, color: 'var(--app-primary)',
+                  }}>
+                    {brouillon.distance_max ?? 0} km
+                  </span>
+                </label>
+                <input
+                  id="distance"
+                  type="range"
+                  min={1}
+                  max={100}
+                  step={1}
+                  value={brouillon.distance_max ?? 20}
+                  onChange={e => modifier({ distance_max: Number(e.target.value) })}
+                />
+                <p style={{
+                  fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+                  margin: '4px 0 0', lineHeight: 1.5,
+                }}>
+                  Au-delà, votre score de distance chute fortement.
+                </p>
+              </div>
+            </Bloc>
+
+            <Bloc titre="Budget et ambiance">
+              <label htmlFor="budget" style={{
+                display: 'block', fontSize: 'var(--app-text-sm)',
+                color: 'var(--app-text-muted)', marginBottom: 6,
+              }}>
+                Budget habituel par sortie, en euros
+              </label>
+              <input
+                id="budget"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={5}
+                value={brouillon.budget ?? ''}
+                onChange={e => modifier({
+                  budget: e.target.value === '' ? null : Number(e.target.value),
+                })}
+                style={champStyle}
+              />
+
+              <div style={{ marginTop: 'var(--app-space-5)' }}>
+                <span style={{
+                  display: 'block', fontSize: 'var(--app-text-sm)',
+                  color: 'var(--app-text-muted)', marginBottom: 'var(--app-space-2)',
+                }}>
+                  Ambiance sociale préférée
+                </span>
+                <Choix
+                  options={NIVEAUX_SOCIAUX.map(n => ({
+                    valeur: n.valeur, libelle: String(n.valeur), detail: n.libelle,
+                  }))}
+                  valeur={brouillon.social_level ?? 3}
+                  onChange={v => modifier({ social_level: Number(v) })}
+                />
+              </div>
+            </Bloc>
+
+            <Bloc titre="Contraintes fortes">
+              <p style={{
+                fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+                margin: '0 0 var(--app-space-4)', lineHeight: 1.5,
+              }}>
+                Elles excluent des activités, elles ne les dévaluent pas.
+              </p>
+
+              <div style={{ display: 'grid', gap: 'var(--app-space-4)' }}>
+                {CATEGORIES_CONTRAINTES.map(categorie => (
+                  <div key={categorie} style={{ minWidth: 0 }}>
+                    <span style={{
+                      display: 'block', fontSize: 10, fontWeight: 700,
+                      textTransform: 'uppercase', letterSpacing: '0.06em',
+                      color: 'var(--app-text-dim)', marginBottom: 'var(--app-space-2)',
+                    }}>
+                      {categorie}
+                    </span>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--app-space-2)' }}>
+                      {CONTRAINTES.filter(c => c.categorie === categorie).map(contrainte => {
+                        const actif = brouillon.hard_constraints?.[contrainte.cle] === true
+                        return (
+                          <button
+                            key={contrainte.cle}
+                            type="button"
+                            aria-pressed={actif}
+                            onClick={() => modifier({
+                              hard_constraints: {
+                                ...(brouillon.hard_constraints ?? {}),
+                                [contrainte.cle]: !actif,
+                              },
+                            })}
+                            style={{
+                              minHeight: 38,
+                              padding: '0 var(--app-space-3)',
+                              borderRadius: 'var(--app-radius-full)',
+                              border: `1.5px solid ${actif ? 'var(--app-primary)' : 'var(--app-border)'}`,
+                              background: actif ? 'var(--app-primary)' : 'transparent',
+                              color: actif ? 'var(--app-on-primary)' : 'var(--app-text-muted)',
+                              fontSize: 'var(--app-text-xs)',
+                              fontWeight: actif ? 700 : 500,
+                              cursor: 'pointer',
+                              minWidth: 0, overflowWrap: 'anywhere',
+                            }}
+                          >
+                            {contrainte.libelle}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
             </Bloc>
 
-            <Preferences profil={profil} />
-            <Contraintes profil={profil} />
+            <Preferences profil={brouillon} />
 
-            {profil.onboarding_done === false && (
-              <Carte style={{ borderColor: 'var(--app-warning)', background: 'rgba(251, 191, 36, 0.1)' }}>
-                <span style={{ fontSize: 'var(--app-text-sm)', color: 'var(--app-warning)', lineHeight: 1.5 }}>
-                  Votre profil n&apos;est pas complet. Tant qu&apos;il ne l&apos;est pas, des
-                  préférences neutres sont utilisées pour vous dans les calculs.
-                </span>
-              </Carte>
-            )}
+            <Carte style={{ background: 'var(--app-surface-2)' }}>
+              <span style={{
+                fontSize: 'var(--app-text-xs)', color: 'var(--app-text-dim)',
+                lineHeight: 1.6,
+              }}>
+                L&apos;adresse de départ et les préférences par type d&apos;activité se
+                modifient encore depuis le site. Elles arriveront ici avec le
+                questionnaire guidé.
+              </span>
+            </Carte>
           </div>
 
-          {(modifie || enregistrement.nom !== 'repos') && (
+          {barreVisible && (
             <BarreEnregistrement
-              etat={enregistrement}
+              etat={sauvegarde}
               onEnregistrer={enregistrer}
-              onAnnuler={() => {
-                setPoids({ ...POIDS_PAR_DEFAUT, ...(profil.weights ?? {}) })
-                setEnregistrement({ nom: 'repos' })
-              }}
+              onAnnuler={() => { setBrouillon(enregistre); setSauvegarde({ nom: 'repos' }) }}
             />
           )}
         </>
       )}
     </Ecran>
+  )
+}
+
+/** Champs réellement modifiables ici — sert à détecter une vraie modification. */
+function cleDeComparaison(p: ProfilComplet) {
+  return {
+    display_name: p.display_name ?? '',
+    transport: p.transport ?? '',
+    distance_max: p.distance_max ?? null,
+    budget: p.budget ?? null,
+    social_level: p.social_level ?? null,
+    weights: arrondirPoids(p.weights ?? POIDS_PAR_DEFAUT),
+    // Les clés à false équivalent à une clé absente : on ne garde que les
+    // contraintes actives, triées, sinon un simple aller-retour sur un bouton
+    // ferait croire à une modification.
+    contraintes: Object.entries(p.hard_constraints ?? {})
+      .filter(([, v]) => v === true).map(([k]) => k).sort(),
+  }
+}
+
+const champStyle: React.CSSProperties = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: 'var(--app-radius-sm)',
+  border: '1.5px solid var(--app-border-strong)',
+  background: 'var(--app-bg-elev)',
+  color: 'var(--app-text)',
+  outline: 'none',
+  boxSizing: 'border-box',
+}
+
+function Choix({
+  options, valeur, onChange,
+}: {
+  options: { valeur: string | number; libelle: string; detail?: string }[]
+  valeur: string | number
+  onChange: (v: string | number) => void
+}) {
+  return (
+    <div style={{ display: 'flex', gap: 'var(--app-space-2)', flexWrap: 'wrap' }}>
+      {options.map(option => {
+        const actif = option.valeur === valeur
+        return (
+          <button
+            key={option.valeur}
+            type="button"
+            aria-pressed={actif}
+            onClick={() => onChange(option.valeur)}
+            style={{
+              flex: '1 1 0', minWidth: 72,
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center', gap: 1,
+              padding: 'var(--app-space-2)',
+              borderRadius: 'var(--app-radius-sm)',
+              border: `1.5px solid ${actif ? 'var(--app-primary)' : 'var(--app-border)'}`,
+              background: actif ? 'rgba(139, 92, 246, 0.16)' : 'transparent',
+              color: actif ? 'var(--app-text)' : 'var(--app-text-muted)',
+              cursor: 'pointer',
+            }}
+          >
+            <span style={{
+              fontSize: 'var(--app-text-sm)', fontWeight: actif ? 700 : 600,
+              overflowWrap: 'anywhere',
+            }}>
+              {option.libelle}
+            </span>
+            {option.detail && (
+              <span style={{ fontSize: 10, color: 'var(--app-text-dim)', overflowWrap: 'anywhere' }}>
+                {option.detail}
+              </span>
+            )}
+          </button>
+        )
+      })}
+    </div>
   )
 }
 
@@ -213,8 +458,7 @@ function BarreEnregistrement({
     <div
       role="status"
       style={{
-        position: 'fixed',
-        left: 0, right: 0,
+        position: 'fixed', left: 0, right: 0,
         bottom: 'calc(var(--app-nav-height) + env(safe-area-inset-bottom, 0px))',
         zIndex: 40,
         padding: 'var(--app-space-3) var(--app-space-5)',
@@ -242,7 +486,7 @@ function BarreEnregistrement({
             fontSize: 'var(--app-text-sm)', fontWeight: 700,
             color: 'var(--app-success)',
           }}>
-            Préférences enregistrées
+            Profil enregistré
           </span>
         ) : (
           <>
@@ -305,40 +549,6 @@ function Preferences({ profil }: { profil: ProfilComplet }) {
               {Math.round(valeur)} %
             </span>
           </span>
-        ))}
-      </div>
-    </Bloc>
-  )
-}
-
-function Contraintes({ profil }: { profil: ProfilComplet }) {
-  const lignes = [
-    profil.distance_max != null ? { cle: 'Distance maximale', valeur: `${profil.distance_max} km` } : null,
-    profil.budget != null ? { cle: 'Budget habituel', valeur: `${profil.budget} €` } : null,
-    profil.transport ? { cle: 'Transport', valeur: profil.transport } : null,
-  ].filter(Boolean) as { cle: string; valeur: string }[]
-
-  if (lignes.length === 0) return null
-
-  return (
-    <Bloc titre="Contraintes">
-      <div style={{ display: 'grid', gap: 'var(--app-space-3)' }}>
-        {lignes.map(l => (
-          <div key={l.cle} style={{
-            display: 'flex', justifyContent: 'space-between',
-            gap: 'var(--app-space-3)', flexWrap: 'wrap', minWidth: 0,
-          }}>
-            <span style={{ fontSize: 'var(--app-text-sm)', color: 'var(--app-text-muted)' }}>
-              {l.cle}
-            </span>
-            <span style={{
-              fontSize: 'var(--app-text-sm)', fontWeight: 600,
-              color: 'var(--app-text)', textAlign: 'right',
-              minWidth: 0, overflowWrap: 'anywhere',
-            }}>
-              {l.valeur}
-            </span>
-          </div>
         ))}
       </div>
     </Bloc>

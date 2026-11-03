@@ -8,7 +8,7 @@
 /**
  * Profil tel que GET /api/profile le renvoie et que PATCH /api/profile
  * l'attend. Les deux listes de champs sont identiques, ce qui n'est pas un
- * hasard : voir enregistrerProfil ci-dessous.
+ * hasard : voir enregistrerProfil plus bas.
  */
 export type ProfilComplet = {
   display_name: string | null
@@ -26,6 +26,8 @@ export type ProfilComplet = {
   fairness?: { riGlobal: number; hasHistory: boolean }
 }
 
+// ─── Critères de pondération ─────────────────────────────────────────────────
+
 export const LIBELLES_CRITERES: Record<string, string> = {
   activity: "Type d'activité",
   schedule: 'Horaires',
@@ -34,7 +36,7 @@ export const LIBELLES_CRITERES: Record<string, string> = {
   social:   'Ambiance sociale',
 }
 
-/** Ordre d'affichage stable, pour que les curseurs ne sautent pas en cours d'édition. */
+/** Ordre stable, pour que les curseurs ne se réordonnent pas en cours d'édition. */
 export const ORDRE_CRITERES = ['activity', 'schedule', 'distance', 'budget', 'social']
 
 export const POIDS_PAR_DEFAUT: Record<string, number> = {
@@ -42,19 +44,104 @@ export const POIDS_PAR_DEFAUT: Record<string, number> = {
 }
 
 /**
- * Convertit des poids bruts en pourcentages dont la somme vaut 100.
- *
- * Le moteur ne consomme que des rapports entre critères, mais la page Profil
- * du web enregistre des valeurs déjà normalisées : on fait de même, pour que
- * les deux interfaces écrivent la même chose en base.
+ * Ramène des poids quelconques à une somme de 100, sans arrondir.
+ * Les valeurs en base peuvent être d'anciennes échelles ; on normalise au
+ * chargement pour que les curseurs portent directement le pourcentage.
  */
 export function normaliserPoids(poids: Record<string, number>): Record<string, number> {
-  const somme = Object.values(poids).reduce((s, v) => s + v, 0)
+  const valeurs = ORDRE_CRITERES.map(c => poids[c] ?? 0)
+  const somme = valeurs.reduce((s, v) => s + v, 0)
   if (somme <= 0) return { ...POIDS_PAR_DEFAUT }
   return Object.fromEntries(
-    Object.entries(poids).map(([cle, valeur]) => [cle, Math.round((valeur / somme) * 100)])
+    ORDRE_CRITERES.map((c, i) => [c, (valeurs[i] / somme) * 100])
   )
 }
+
+/**
+ * Déplace un critère à la valeur voulue et répartit le reste sur les autres,
+ * proportionnellement à ce qu'ils valaient. La somme reste à 100, donc chaque
+ * curseur se replace tout seul à sa nouvelle part.
+ */
+export function ajusterPoids(
+  poids: Record<string, number>,
+  cle: string,
+  valeur: number,
+): Record<string, number> {
+  const borne  = Math.min(Math.max(valeur, 0), 100)
+  const autres = ORDRE_CRITERES.filter(c => c !== cle)
+  const sommeAutres = autres.reduce((s, c) => s + (poids[c] ?? 0), 0)
+  const restant = 100 - borne
+
+  const resultat: Record<string, number> = { [cle]: borne }
+  if (sommeAutres <= 0) {
+    // Les autres étaient tous à zéro : aucune proportion à préserver.
+    autres.forEach(c => { resultat[c] = restant / autres.length })
+  } else {
+    autres.forEach(c => { resultat[c] = ((poids[c] ?? 0) / sommeAutres) * restant })
+  }
+  return resultat
+}
+
+/**
+ * Arrondit à l'entier en garantissant une somme de 100 : l'écart d'arrondi,
+ * au plus quelques unités, est reporté sur le critère le plus élevé, où il se
+ * voit le moins.
+ */
+export function arrondirPoids(poids: Record<string, number>): Record<string, number> {
+  const arrondis: Record<string, number> = Object.fromEntries(
+    ORDRE_CRITERES.map(c => [c, Math.round(poids[c] ?? 0)])
+  )
+  const ecart = 100 - Object.values(arrondis).reduce((s, v) => s + v, 0)
+  if (ecart !== 0) {
+    const plusGrand = ORDRE_CRITERES.reduce((a, b) => (arrondis[a] >= arrondis[b] ? a : b))
+    arrondis[plusGrand] += ecart
+  }
+  return arrondis
+}
+
+// ─── Autres réglages ─────────────────────────────────────────────────────────
+
+// Mêmes valeurs que la page Profil du web. Les libellés sont débarrassés de
+// leurs emoji : la convention du projet les proscrit dans l'interface.
+export const TRANSPORTS = [
+  { valeur: 'foot',    libelle: 'À pied',      detail: '~5 km/h' },
+  { valeur: 'transit', libelle: 'Transports',  detail: '~20 km/h' },
+  { valeur: 'car',     libelle: 'Voiture',     detail: '~30 km/h' },
+]
+
+export const NIVEAUX_SOCIAUX = [
+  { valeur: 1, libelle: 'Calme' },
+  { valeur: 2, libelle: 'Cosy' },
+  { valeur: 3, libelle: 'Équilibré' },
+  { valeur: 4, libelle: 'Vivant' },
+  { valeur: 5, libelle: 'Festif' },
+]
+
+export const CONTRAINTES: { cle: string; libelle: string; categorie: string }[] = [
+  { cle: 'PMR',          libelle: 'PMR',                        categorie: 'Mobilité' },
+  { cle: 'stair',        libelle: "Pas d'escaliers",            categorie: 'Mobilité' },
+  { cle: 'cardio',       libelle: 'Condition cardio',           categorie: 'Mobilité' },
+  { cle: 'vertigo',      libelle: 'Vertige',                    categorie: 'Mobilité' },
+  { cle: 'aquatic',      libelle: 'Non-nageur',                 categorie: 'Mobilité' },
+  { cle: 'nuts',         libelle: 'Allergie noix',              categorie: 'Alimentaire' },
+  { cle: 'diet',         libelle: 'Régime médical',             categorie: 'Alimentaire' },
+  { cle: 'vegan',        libelle: 'Vegan',                      categorie: 'Alimentaire' },
+  { cle: 'gluten',       libelle: 'Sans gluten',                categorie: 'Alimentaire' },
+  { cle: 'seafood',      libelle: 'Allergie fruits de mer',     categorie: 'Alimentaire' },
+  { cle: 'halal_kosher', libelle: 'Viande confessionnelle',     categorie: 'Alimentaire' },
+  { cle: 'alcohol',      libelle: 'Sans alcool',                categorie: 'Alimentaire' },
+  { cle: 'pregnancy',    libelle: 'Grossesse',                  categorie: 'Alimentaire' },
+  { cle: 'noise',        libelle: 'Hyperacousie',               categorie: 'Environnement' },
+  { cle: 'epilepsy',     libelle: 'Photosensibilité',           categorie: 'Environnement' },
+  { cle: 'smoke',        libelle: 'Zone non-fumeur',            categorie: 'Environnement' },
+  { cle: 'allergy_pets', libelle: 'Allergie animaux',           categorie: 'Environnement' },
+  { cle: 'kids',         libelle: 'Enfants',                    categorie: 'Accompagnement' },
+  { cle: 'pets',         libelle: "Animal d'assistance",        categorie: 'Accompagnement' },
+]
+
+export const CATEGORIES_CONTRAINTES = ['Mobilité', 'Alimentaire', 'Environnement', 'Accompagnement']
+
+// ─── Enregistrement ──────────────────────────────────────────────────────────
 
 /**
  * Enregistre le profil.
@@ -65,32 +152,27 @@ export function normaliserPoids(poids: Record<string, number>): Record<string, n
  * home_lat / home_lng, donc l'adresse du domicile et toutes les préférences
  * d'activité.
  *
- * On renvoie donc toujours le profil complet, modification comprise. C'est ce
- * que fait déjà la page Profil du web. Tant que la route n'accepte pas de mise
- * à jour partielle, toute écriture doit passer par ici.
+ * On envoie donc toujours le profil complet. C'est ce que fait déjà la page
+ * Profil du web. Tant que la route n'accepte pas de mise à jour partielle,
+ * toute écriture doit passer par ici.
  */
-export async function enregistrerProfil(
-  profilActuel: ProfilComplet,
-  modifications: Partial<ProfilComplet>,
-): Promise<void> {
-  const complet = { ...profilActuel, ...modifications }
-
+export async function enregistrerProfil(profil: ProfilComplet): Promise<void> {
   const reponse = await fetch('/api/profile', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      display_name:     complet.display_name,
-      zone:             complet.zone,
-      home_lat:         complet.home_lat,
-      home_lng:         complet.home_lng,
-      transport:        complet.transport,
-      distance_max:     complet.distance_max,
-      budget:           complet.budget,
-      social_level:     complet.social_level,
-      weights:          complet.weights,
-      hard_constraints: complet.hard_constraints,
-      activity_prefs:   complet.activity_prefs,
-      onboarding_done:  complet.onboarding_done ?? true,
+      display_name:     profil.display_name,
+      zone:             profil.zone,
+      home_lat:         profil.home_lat,
+      home_lng:         profil.home_lng,
+      transport:        profil.transport,
+      distance_max:     profil.distance_max,
+      budget:           profil.budget,
+      social_level:     profil.social_level,
+      weights:          profil.weights,
+      hard_constraints: profil.hard_constraints,
+      activity_prefs:   profil.activity_prefs,
+      onboarding_done:  profil.onboarding_done ?? true,
     }),
   })
 
