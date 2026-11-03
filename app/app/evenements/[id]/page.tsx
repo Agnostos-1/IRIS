@@ -30,6 +30,7 @@ type Evenement = {
 }
 
 type Disponibilite = {
+  email?: string
   userId: string
   displayName: string
   submitted: boolean
@@ -138,6 +139,11 @@ function Contenu({
   const etape  = Math.min(Math.max(evenement.phase, 0), DERNIERE_PHASE)
   const repondu = disponibilites.filter(d => d.submitted).length
 
+  // La route ne renvoie l'adresse électronique que pour la ligne de
+  // l'utilisateur courant : c'est ce qui permet de reconnaître sa propre
+  // réponse sans qu'aucun identifiant ne transite.
+  const jAiRepondu = disponibilites.some(d => d.email !== undefined && d.submitted)
+
   return (
     <>
       <header style={{ marginBottom: 'var(--app-space-5)' }}>
@@ -245,6 +251,23 @@ function Contenu({
 
         {evenement.inviteCode && !evenement.cancelledAt && (
           <Invitation code={evenement.inviteCode} nomEvenement={evenement.name} />
+        )}
+
+        {evenement.proposedDates.length > 0 && !evenement.cancelledAt && (
+          <Link
+            href={`/app/evenements/${evenement.id}/disponibilites`}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+              minHeight: 52, borderRadius: 'var(--app-radius)',
+              background: jAiRepondu ? 'transparent' : 'var(--app-grad)',
+              border: jAiRepondu ? '1.5px solid var(--app-border-strong)' : 'none',
+              color: jAiRepondu ? 'var(--app-text)' : 'var(--app-on-primary)',
+              fontSize: 'var(--app-text-sm)', fontWeight: 700,
+              textDecoration: 'none', WebkitTapHighlightColor: 'transparent',
+            }}
+          >
+            {jAiRepondu ? 'Modifier mes disponibilités' : 'Indiquer mes disponibilités'}
+          </Link>
         )}
 
         {evenement.proposedDates.length > 0 && (
