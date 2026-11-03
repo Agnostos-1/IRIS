@@ -67,6 +67,24 @@ export default function EvenementsApp() {
 
   return (
     <Ecran titre="Événements" sousTitre="Ceux auxquels vous participez">
+      <Link
+        href="/app/evenements/nouveau"
+        style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+          minHeight: 48, marginBottom: 'var(--app-space-4)',
+          borderRadius: 'var(--app-radius)',
+          background: 'var(--app-grad)', color: 'var(--app-on-primary)',
+          fontSize: 'var(--app-text-sm)', fontWeight: 700,
+          textDecoration: 'none', WebkitTapHighlightColor: 'transparent',
+        }}
+      >
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          strokeWidth="2.5" strokeLinecap="round" aria-hidden="true">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+        Nouvel événement
+      </Link>
+
       {etat.nom === 'chargement' && <Squelette />}
 
       {etat.nom === 'erreur' && (
